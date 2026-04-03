@@ -2,11 +2,11 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $runtimeDir = Join-Path $repoRoot "onclaw/runtime"
-$tmpDir = Join-Path $repoRoot "onclaw/tmp"
+$runtimeEntry = Join-Path $runtimeDir "openclaw-entry.cjs"
 
 Write-Host "Running portable smoke checks..."
 if (!(Test-Path $runtimeDir)) { throw "runtime missing" }
-New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+if (!(Test-Path $runtimeEntry)) { throw "runtime entry missing: $runtimeEntry" }
 
 $healthHost = "127.0.0.1"
 $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse($healthHost), 0)
@@ -14,30 +14,10 @@ $listener.Start()
 $healthPort = ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
 $listener.Stop()
 
-$healthServerScript = @"
-const http = require("node:http");
-const host = process.env.ONCLAW_HEALTH_HOST || "127.0.0.1";
-const port = Number(process.env.ONCLAW_HEALTH_PORT || "18789");
-const server = http.createServer((req, res) => {
-  if (req.url === "/health") {
-    res.statusCode = 200;
-    res.end("ok");
-    return;
-  }
-  res.statusCode = 404;
-  res.end("not-found");
-});
-server.listen(port, host);
-const shutdown = () => server.close(() => process.exit(0));
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
-"@
-
 $env:ONCLAW_HEALTH_HOST = $healthHost
 $env:ONCLAW_HEALTH_PORT = "$healthPort"
-$probeScriptPath = Join-Path $tmpDir ".smoke-probe.cjs"
-Set-Content -Path $probeScriptPath -Value $healthServerScript -Encoding UTF8
-$probeProcess = Start-Process -FilePath "node" -ArgumentList $probeScriptPath -PassThru
+Write-Host "Runtime entry: $runtimeEntry"
+$probeProcess = Start-Process -FilePath "node" -ArgumentList $runtimeEntry -PassThru
 
 try {
   $healthy = $false
@@ -63,9 +43,6 @@ try {
 finally {
   if ($probeProcess -and -not $probeProcess.HasExited) {
     Stop-Process -Id $probeProcess.Id -Force
-  }
-  if (Test-Path $probeScriptPath) {
-    Remove-Item $probeScriptPath -Force
   }
   Remove-Item Env:ONCLAW_HEALTH_HOST -ErrorAction SilentlyContinue
   Remove-Item Env:ONCLAW_HEALTH_PORT -ErrorAction SilentlyContinue
