@@ -80,4 +80,48 @@ describe("startManagedRuntime", () => {
       await rm(parent, { recursive: true, force: true });
     }
   });
+
+  it("forces localhost binding even when a non-local host is requested", async () => {
+    const parent = await mkdtemp(join(tmpdir(), "onclaw-supervisor-"));
+    const runtimeEntry = join(parent, "runtime-probe.cjs");
+    const preferredPort = 28810;
+    try {
+      await writeFile(
+        runtimeEntry,
+        [
+          'const http = require("node:http");',
+          'const host = process.env.ONCLAW_GATEWAY_HOST || "127.0.0.1";',
+          'const port = Number(process.env.ONCLAW_GATEWAY_PORT || "18789");',
+          "const server = http.createServer((req, res) => {",
+          '  if (req.url === "/health") {',
+          "    res.statusCode = 200;",
+          '    res.end(host);',
+          "    return;",
+          "  }",
+          "  res.statusCode = 404;",
+          '  res.end("not-found");',
+          "});",
+          "server.listen(port, host);",
+          "const shutdown = () => server.close(() => process.exit(0));",
+          'process.on("SIGTERM", shutdown);',
+          'process.on("SIGINT", shutdown);'
+        ].join("\n"),
+        "utf8"
+      );
+
+      const started = await startManagedRuntime({
+        preferredPort,
+        candidatePorts: [preferredPort],
+        runtimeEntry,
+        host: "0.0.0.0"
+      });
+
+      expect(started.healthUrl).toContain("127.0.0.1");
+      const response = await fetch(started.healthUrl);
+      expect(await response.text()).toBe("127.0.0.1");
+      await started.stop();
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
 });

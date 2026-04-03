@@ -20,12 +20,13 @@ function waitExit(child: ChildProcess) {
 }
 
 export async function startOpenClaw(input: StartOpenClawInput): Promise<OpenClawStartResult> {
+  const host = "127.0.0.1";
   const child = spawn(process.execPath, [input.runtimeEntry], {
     cwd: input.cwd,
     stdio: "ignore",
     env: {
       ...process.env,
-      ONCLAW_GATEWAY_HOST: input.host,
+      ONCLAW_GATEWAY_HOST: host,
       ONCLAW_GATEWAY_PORT: String(input.port)
     }
   });

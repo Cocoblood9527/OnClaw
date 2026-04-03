@@ -49,7 +49,7 @@ function isPortAvailable(port: number) {
 }
 
 export async function startManagedRuntime(input: StartManagedRuntimeInput) {
-  const host = input.host ?? "127.0.0.1";
+  const host = "127.0.0.1";
   const port = await pickAvailablePort(input.preferredPort, input.candidatePorts);
   const started = await startOpenClaw({
     runtimeEntry: input.runtimeEntry,

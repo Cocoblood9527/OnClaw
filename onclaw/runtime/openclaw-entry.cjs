@@ -3,7 +3,7 @@ const { spawn } = require("node:child_process");
 const { existsSync, mkdirSync } = require("node:fs");
 const path = require("node:path");
 
-const host = process.env.ONCLAW_HEALTH_HOST || "127.0.0.1";
+const host = "127.0.0.1";
 const healthPort = Number(process.env.ONCLAW_HEALTH_PORT || "18789");
 const gatewayPort = Number(process.env.ONCLAW_GATEWAY_PORT || String(healthPort + 1));
 
