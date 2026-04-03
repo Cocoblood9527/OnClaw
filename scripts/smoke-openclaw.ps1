@@ -20,32 +20,49 @@ $env:ONCLAW_HEALTH_HOST = $healthHost
 $env:ONCLAW_HEALTH_PORT = "$healthPort"
 $runtimeMode = "unknown"
 $runtimeReason = "unknown"
-Write-Host "Runtime entry: $runtimeEntry"
-$probeProcess = Start-Process -FilePath "node" -ArgumentList $runtimeEntry -PassThru
+$healthUrl = "http://${healthHost}:$healthPort/health"
+$fallbackHealthUrl = "http://${healthHost}:18789/health"
 
-try {
-  $healthy = $false
+function Test-HealthUrl {
+  param(
+    [string]$Url,
+    [ref]$ModeRef,
+    [ref]$ReasonRef
+  )
+
   for ($i = 0; $i -lt 25; $i++) {
     Start-Sleep -Milliseconds 200
     try {
-      $response = Invoke-WebRequest -Uri "http://${healthHost}:$healthPort/health" -UseBasicParsing -TimeoutSec 1
+      $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 1
       if ($response.StatusCode -eq 200) {
         try {
           $healthPayload = $response.Content | ConvertFrom-Json
           if ($healthPayload.mode) {
-            $runtimeMode = "$($healthPayload.mode)"
+            $ModeRef.Value = "$($healthPayload.mode)"
           }
           if ($healthPayload.reason) {
-            $runtimeReason = "$($healthPayload.reason)"
+            $ReasonRef.Value = "$($healthPayload.reason)"
           }
         } catch {
         }
-        Write-Host "Runtime mode: $runtimeMode"
-        Write-Host "Runtime reason: $runtimeReason"
-        $healthy = $true
-        break
+        return $true
       }
     } catch {
+    }
+  }
+
+  return $false
+}
+
+Write-Host "Runtime entry: $runtimeEntry"
+$probeProcess = Start-Process -FilePath "node" -ArgumentList $runtimeEntry -PassThru
+
+try {
+  $healthy = Test-HealthUrl -Url $healthUrl -ModeRef ([ref]$runtimeMode) -ReasonRef ([ref]$runtimeReason)
+  if (-not $healthy -and $healthPort -ne 18789) {
+    $healthy = Test-HealthUrl -Url $fallbackHealthUrl -ModeRef ([ref]$runtimeMode) -ReasonRef ([ref]$runtimeReason)
+    if ($healthy) {
+      $healthUrl = $fallbackHealthUrl
     }
   }
 
@@ -53,14 +70,16 @@ try {
     throw "gateway health check failed"
   }
 
-  Write-Host "Gateway health check passed at http://${healthHost}:$healthPort/health"
+  Write-Host "Runtime mode: $runtimeMode"
+  Write-Host "Runtime reason: $runtimeReason"
+  Write-Host "Gateway health check passed at $healthUrl"
   New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
   @{
     timestamp = [DateTimeOffset]::UtcNow.ToString("o")
     passed = $true
     mode = $runtimeMode
     reason = $runtimeReason
-    healthUrl = "http://${healthHost}:$healthPort/health"
+    healthUrl = $healthUrl
     runtimeEntry = "$runtimeEntry"
   } | ConvertTo-Json | Set-Content -Path $smokeReportPath -Encoding utf8
   Write-Host "Smoke checks passed"

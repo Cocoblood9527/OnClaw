@@ -24,7 +24,42 @@ function fakeOfficialGatewayScript() {
   ].join("\n");
 }
 
+function fakeFixedHealthRuntimeScript(port: number) {
+  return [
+    'const http = require("node:http");',
+    `const server = http.createServer((req, res) => {`,
+    '  if (req.url === "/health") {',
+    "    res.statusCode = 200;",
+    '    res.setHeader("Content-Type", "application/json; charset=utf-8");',
+    '    res.end(JSON.stringify({ ok: true, mode: "probe", reason: "forced_probe" }));',
+    "    return;",
+    "  }",
+    "  res.statusCode = 404;",
+    '  res.end("not-found");',
+    "});",
+    `server.listen(${port}, "127.0.0.1");`,
+    "const shutdown = () => server.close(() => process.exit(0));",
+    'process.on("SIGTERM", shutdown);',
+    'process.on("SIGINT", shutdown);'
+  ].join("\n");
+}
+
 describe("smoke-openclaw script", () => {
+  it("falls back to default health port when runtime ignores randomized health port", async () => {
+    const runtimeEntry = join(process.cwd(), "onclaw", "runtime", "openclaw-entry.cjs");
+    const originalRuntimeEntry = await readFile(runtimeEntry, "utf8");
+    await writeFile(runtimeEntry, fakeFixedHealthRuntimeScript(18789), "utf8");
+    try {
+      const { stdout } = await execFileAsync("pwsh", ["./scripts/smoke-openclaw.ps1"], {
+        cwd: process.cwd()
+      });
+      expect(stdout).toContain("Gateway health check passed at http://127.0.0.1:18789/health");
+      expect(stdout).toContain("Smoke checks passed");
+    } finally {
+      await writeFile(runtimeEntry, originalRuntimeEntry, "utf8");
+    }
+  }, 30_000);
+
   it("writes smoke acceptance evidence to onclaw/logs/smoke-latest.json", async () => {
     const logsDir = join(process.cwd(), "onclaw", "logs");
     const smokeReport = join(logsDir, "smoke-latest.json");
@@ -46,7 +81,7 @@ describe("smoke-openclaw script", () => {
     expect(report.mode).toBe("probe");
     expect(report.reason).toBe("forced_probe");
     expect(report.healthUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/health$/);
-  });
+  }, 30_000);
 
   it("uses managed runtime entry under onclaw/runtime and reports probe mode by default", async () => {
     const runtimeDir = join(process.cwd(), "onclaw", "runtime");
