@@ -12,13 +12,18 @@ describe("smoke-openclaw script", () => {
     await mkdir(runtimeDir, { recursive: true });
 
     const { stdout } = await execFileAsync("pwsh", ["./scripts/smoke-openclaw.ps1"], {
-      cwd: process.cwd()
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        ONCLAW_FORCE_PROBE: "1"
+      }
     });
 
     expect(stdout).toContain("Running portable smoke checks...");
     expect(stdout).toContain("Runtime entry:");
     expect(stdout).toContain("onclaw/runtime/openclaw-entry.cjs");
     expect(stdout).toContain("Runtime mode: probe");
+    expect(stdout).toContain("Runtime reason: forced_probe");
     expect(stdout).toContain("Gateway health check passed");
     expect(stdout).toContain("Smoke checks passed");
   });
@@ -43,12 +48,27 @@ describe("smoke-openclaw script", () => {
         cwd: process.cwd(),
         env: {
           ...process.env,
-          ONCLAW_OPENCLAW_MJS: fakeOpenClaw
+          ONCLAW_OPENCLAW_MJS: fakeOpenClaw,
+          ONCLAW_DISABLE_NPX_OFFICIAL: "1"
         }
       });
       expect(stdout).toContain("Runtime mode: official");
+      expect(stdout).toContain("Runtime reason: official_env_path");
     } finally {
       await rm(fakeOpenClaw, { force: true });
     }
+  });
+
+  it("falls back to probe with explicit reason when official path is missing", async () => {
+    const { stdout } = await execFileAsync("pwsh", ["./scripts/smoke-openclaw.ps1"], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        ONCLAW_OPENCLAW_MJS: join(process.cwd(), "onclaw", "runtime", "missing-openclaw.mjs"),
+        ONCLAW_DISABLE_NPX_OFFICIAL: "1"
+      }
+    });
+    expect(stdout).toContain("Runtime mode: probe");
+    expect(stdout).toContain("Runtime reason: official_env_path_missing");
   });
 });

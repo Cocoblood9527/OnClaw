@@ -13,13 +13,12 @@ const officialMjsPath =
   process.env.ONCLAW_OPENCLAW_MJS || path.join(runtimeDir, "node_modules", "openclaw", "openclaw.mjs");
 
 let mode = "probe";
+let reason = "probe_default";
 let officialGatewayProcess = null;
 
 function startOfficialGatewayIfAvailable() {
   if (process.env.ONCLAW_FORCE_PROBE === "1") {
-    return;
-  }
-  if (!existsSync(officialMjsPath)) {
+    reason = "forced_probe";
     return;
   }
 
@@ -27,16 +26,40 @@ function startOfficialGatewayIfAvailable() {
   mkdirSync(stateDir, { recursive: true });
   const configPath = path.join(stateDir, "openclaw.json");
 
-  const child = spawn(process.execPath, [officialMjsPath, "gateway", "--port", String(gatewayPort)], {
-    stdio: "ignore",
-    env: {
-      ...process.env,
-      OPENCLAW_STATE_DIR: stateDir,
-      OPENCLAW_CONFIG_PATH: configPath
+  let child = null;
+  if (process.env.ONCLAW_OPENCLAW_MJS) {
+    if (!existsSync(officialMjsPath)) {
+      reason = "official_env_path_missing";
+      return;
     }
-  });
+    child = spawn(process.execPath, [officialMjsPath, "gateway", "--port", String(gatewayPort)], {
+      stdio: "ignore",
+      env: {
+        ...process.env,
+        OPENCLAW_STATE_DIR: stateDir,
+        OPENCLAW_CONFIG_PATH: configPath
+      }
+    });
+    reason = "official_env_path";
+  } else if (process.env.ONCLAW_DISABLE_NPX_OFFICIAL === "1") {
+    reason = "official_disabled";
+    return;
+  } else {
+    child = spawn("npx", ["--yes", "openclaw@latest", "gateway", "--port", String(gatewayPort)], {
+      stdio: "ignore",
+      env: {
+        ...process.env,
+        OPENCLAW_STATE_DIR: stateDir,
+        OPENCLAW_CONFIG_PATH: configPath
+      }
+    });
+    reason = "official_npx_latest";
+  }
 
-  if (!child.pid) {
+  if (!child || !child.pid) {
+    mode = "probe";
+    reason = "official_spawn_failed";
+    officialGatewayProcess = null;
     return;
   }
 
@@ -44,10 +67,12 @@ function startOfficialGatewayIfAvailable() {
   officialGatewayProcess = child;
   child.once("error", () => {
     mode = "probe";
+    reason = "official_spawn_error";
     officialGatewayProcess = null;
   });
   child.once("exit", () => {
     mode = "probe";
+    reason = "official_process_exited";
     officialGatewayProcess = null;
   });
 }
@@ -56,7 +81,7 @@ const server = http.createServer((req, res) => {
   if (req.url === "/health") {
     res.statusCode = 200;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
-    res.end(JSON.stringify({ ok: true, mode }));
+    res.end(JSON.stringify({ ok: true, mode, reason }));
     return;
   }
   res.statusCode = 404;

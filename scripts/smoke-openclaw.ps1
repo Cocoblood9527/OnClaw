@@ -27,14 +27,19 @@ try {
       $response = Invoke-WebRequest -Uri "http://${healthHost}:$healthPort/health" -UseBasicParsing -TimeoutSec 1
       if ($response.StatusCode -eq 200) {
         $runtimeMode = "unknown"
+        $runtimeReason = "unknown"
         try {
           $healthPayload = $response.Content | ConvertFrom-Json
           if ($healthPayload.mode) {
             $runtimeMode = "$($healthPayload.mode)"
           }
+          if ($healthPayload.reason) {
+            $runtimeReason = "$($healthPayload.reason)"
+          }
         } catch {
         }
         Write-Host "Runtime mode: $runtimeMode"
+        Write-Host "Runtime reason: $runtimeReason"
         $healthy = $true
         break
       }
