@@ -58,4 +58,28 @@ describe("applyUpgradePlan", () => {
       await rm(parent, { recursive: true, force: true });
     }
   });
+
+  it("accepts relative managed pointer path under onclaw/state", async () => {
+    const parent = await mkdtemp(join(tmpdir(), "onclaw-vm-"));
+    const previousCwd = process.cwd();
+    try {
+      process.chdir(parent);
+      await mkdir(join("onclaw", "state"), { recursive: true });
+      const out = await applyUpgradePlan({
+        current: "snapshots/openclaw/v1",
+        incoming: "snapshots/openclaw/v2",
+        smokePass: true,
+        pointerFile: join("onclaw", "state", "active-runtime.json")
+      });
+      const pointer = JSON.parse(
+        await readFile(join("onclaw", "state", "active-runtime.json"), "utf8")
+      ) as { active: string };
+
+      expect(out.active).toBe("snapshots/openclaw/v2");
+      expect(pointer.active).toBe("snapshots/openclaw/v2");
+    } finally {
+      process.chdir(previousCwd);
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
 });

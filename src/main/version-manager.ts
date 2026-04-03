@@ -10,7 +10,7 @@ export interface UpgradePlanInput {
 
 function isManagedActivePointerFile(pointerFile: string) {
   const normalized = pointerFile.replaceAll("\\", "/").toLowerCase();
-  return normalized.endsWith("/onclaw/state/active-runtime.json");
+  return /(^|\/)onclaw\/state\/active-runtime\.json$/.test(normalized);
 }
 
 async function writeActivePointer(pointerFile: string, active: string) {
