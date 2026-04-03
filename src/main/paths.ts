@@ -15,3 +15,8 @@ export function resolveOnclawPaths(root: string) {
 export function resolveActiveRuntimePointer(root: string) {
   return `${root}/state/active-runtime.json`;
 }
+
+export function isOnclawRoot(root: string) {
+  const normalized = root.replaceAll("\\", "/").replace(/\/+$/, "");
+  return normalized.toLowerCase().endsWith("/onclaw") || normalized.toLowerCase() === "onclaw";
+}
