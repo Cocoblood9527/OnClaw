@@ -3,12 +3,14 @@ export interface GatewayConfig {
   token: string;
 }
 
-export type ProviderId = "openai" | "anthropic" | "openrouter";
+export type ProviderId = "openai" | "anthropic" | "openrouter" | "minimax";
 
 export interface ProviderDefinition {
   id: ProviderId;
   label: string;
   healthUrl: string;
+  defaultModel: string;
+  docUrl: string;
 }
 
 export interface AdvancedSettings {
