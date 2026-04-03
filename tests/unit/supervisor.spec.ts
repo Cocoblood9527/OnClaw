@@ -6,9 +6,26 @@ import { describe, it, expect } from "vitest";
 import { pickAvailablePort, startManagedRuntime } from "../../src/main/supervisor";
 
 describe("pickAvailablePort", () => {
+  it("keeps preferred port when it is available", async () => {
+    const preferredPort = 28795;
+    const port = await pickAvailablePort(preferredPort, [preferredPort, 28796]);
+    expect(port).toBe(preferredPort);
+  });
+
   it("returns fallback port when preferred is occupied", async () => {
-    const port = await pickAvailablePort(18789, [18789, 18790]);
-    expect(port).toBe(18790);
+    const preferredPort = 28797;
+    const blocker = createServer();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        blocker.once("error", reject);
+        blocker.listen(preferredPort, "127.0.0.1", () => resolve());
+      });
+
+      const port = await pickAvailablePort(preferredPort, [preferredPort, 28798]);
+      expect(port).toBe(28798);
+    } finally {
+      await new Promise<void>((resolve) => blocker.close(() => resolve()));
+    }
   });
 });
 

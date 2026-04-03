@@ -1,12 +1,20 @@
 import { startOpenClaw } from "./openclaw-adapter";
+import { createServer } from "node:net";
 
 export async function pickAvailablePort(preferred: number, candidates: number[]) {
-  if (!candidates.includes(preferred)) {
+  if (await isPortAvailable(preferred)) {
     return preferred;
   }
 
-  const fallback = candidates.find((port) => port !== preferred);
-  return fallback ?? preferred;
+  for (const port of candidates) {
+    if (port === preferred) {
+      continue;
+    }
+    if (await isPortAvailable(port)) {
+      return port;
+    }
+  }
+  return preferred;
 }
 
 export interface StartManagedRuntimeInput {
@@ -28,6 +36,16 @@ async function waitForHealth(healthUrl: string) {
     }
   }
   throw new Error(`managed runtime health check failed: ${healthUrl}`);
+}
+
+function isPortAvailable(port: number) {
+  return new Promise<boolean>((resolve) => {
+    const server = createServer();
+    server.once("error", () => resolve(false));
+    server.listen(port, "127.0.0.1", () => {
+      server.close(() => resolve(true));
+    });
+  });
 }
 
 export async function startManagedRuntime(input: StartManagedRuntimeInput) {
