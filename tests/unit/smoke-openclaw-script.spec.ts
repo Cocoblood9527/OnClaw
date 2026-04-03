@@ -44,7 +44,46 @@ function fakeFixedHealthRuntimeScript(port: number) {
   ].join("\n");
 }
 
+function fakeFixedHealthRuntimeWithoutMetadata(port: number) {
+  return [
+    'const http = require("node:http");',
+    "const server = http.createServer((req, res) => {",
+    '  if (req.url === "/health") {',
+    "    res.statusCode = 200;",
+    '    res.setHeader("Content-Type", "text/plain; charset=utf-8");',
+    '    res.end("ok");',
+    "    return;",
+    "  }",
+    "  res.statusCode = 404;",
+    '  res.end("not-found");',
+    "});",
+    `server.listen(${port}, "127.0.0.1");`,
+    "const shutdown = () => server.close(() => process.exit(0));",
+    'process.on("SIGTERM", shutdown);',
+    'process.on("SIGINT", shutdown);'
+  ].join("\n");
+}
+
 describe("smoke-openclaw script", () => {
+  it("marks fallback reason when default health port has no mode metadata", async () => {
+    const runtimeEntry = join(process.cwd(), "onclaw", "runtime", "openclaw-entry.cjs");
+    const originalRuntimeEntry = await readFile(runtimeEntry, "utf8");
+    const smokeReport = join(process.cwd(), "onclaw", "logs", "smoke-latest.json");
+    await writeFile(runtimeEntry, fakeFixedHealthRuntimeWithoutMetadata(18789), "utf8");
+    try {
+      const { stdout } = await execFileAsync("pwsh", ["./scripts/smoke-openclaw.ps1"], {
+        cwd: process.cwd()
+      });
+      const reportRaw = await readFile(smokeReport, "utf8");
+      const report = JSON.parse(reportRaw) as Record<string, unknown>;
+      expect(stdout).toContain("Runtime mode: unknown");
+      expect(stdout).toContain("Runtime reason: fallback_default_health_port_no_metadata");
+      expect(report.reason).toBe("fallback_default_health_port_no_metadata");
+    } finally {
+      await writeFile(runtimeEntry, originalRuntimeEntry, "utf8");
+    }
+  }, 30_000);
+
   it("falls back to default health port when runtime ignores randomized health port", async () => {
     const runtimeEntry = join(process.cwd(), "onclaw", "runtime", "openclaw-entry.cjs");
     const originalRuntimeEntry = await readFile(runtimeEntry, "utf8");

@@ -63,6 +63,9 @@ try {
     $healthy = Test-HealthUrl -Url $fallbackHealthUrl -ModeRef ([ref]$runtimeMode) -ReasonRef ([ref]$runtimeReason)
     if ($healthy) {
       $healthUrl = $fallbackHealthUrl
+      if ($runtimeMode -eq "unknown" -and $runtimeReason -eq "unknown") {
+        $runtimeReason = "fallback_default_health_port_no_metadata"
+      }
     }
   }
 
