@@ -15,6 +15,8 @@ fi
 
 mkdir -p \
   "${normalized_root}/runtime" \
+  "${normalized_root}/snapshots" \
+  "${normalized_root}/state" \
   "${normalized_root}/data" \
   "${normalized_root}/logs" \
   "${normalized_root}/cache" \

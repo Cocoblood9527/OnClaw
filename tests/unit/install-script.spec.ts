@@ -22,6 +22,8 @@ describe("phase2 installer scripts", () => {
       });
       expect((await stat(join(rootDir, "runtime"))).isDirectory()).toBe(true);
       expect((await stat(join(rootDir, "data"))).isDirectory()).toBe(true);
+      expect((await stat(join(rootDir, "snapshots"))).isDirectory()).toBe(true);
+      expect((await stat(join(rootDir, "state"))).isDirectory()).toBe(true);
       const runtimeEntry = await readFile(join(rootDir, "runtime", "openclaw-entry.cjs"), "utf8");
       expect(runtimeEntry).toContain('"127.0.0.1"');
     } finally {
@@ -80,6 +82,8 @@ describe("phase2 installer scripts", () => {
       });
       expect((await stat(join(rootDir, "runtime"))).isDirectory()).toBe(true);
       expect((await stat(join(rootDir, "logs"))).isDirectory()).toBe(true);
+      expect((await stat(join(rootDir, "snapshots"))).isDirectory()).toBe(true);
+      expect((await stat(join(rootDir, "state"))).isDirectory()).toBe(true);
       const runtimeEntry = await readFile(join(rootDir, "runtime", "openclaw-entry.cjs"), "utf8");
       expect(runtimeEntry).toContain('"127.0.0.1"');
     } finally {

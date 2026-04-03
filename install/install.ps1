@@ -12,6 +12,8 @@ if (-not ($normalizedRoot -match "(^|[\\/])onclaw$")) {
 
 $managedDirs = @(
   "runtime",
+  "snapshots",
+  "state",
   "data",
   "logs",
   "cache",
