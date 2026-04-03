@@ -11,6 +11,14 @@ export interface ProviderDefinition {
   healthUrl: string;
 }
 
+export interface AdvancedSettings {
+  rootDir: string;
+  host: string;
+  tokenMode: "auto-random";
+  providerTimeoutMs: number;
+  providerRetryCount: number;
+}
+
 export interface SetupSelfCheckInput {
   rootDir: string;
   providerHealthUrl: string;
