@@ -44,7 +44,10 @@ async function checkProviderReachable(
   providerAuthToken: string | undefined,
   fetcher: typeof fetch
 ): Promise<boolean> {
-  const headers = providerAuthToken ? { Authorization: `Bearer ${providerAuthToken}` } : {};
+  const headers: Record<string, string> = {};
+  if (providerAuthToken) {
+    headers.Authorization = `Bearer ${providerAuthToken}`;
+  }
   try {
     const response = await fetcher(providerHealthUrl, { method: "GET", headers });
     return response.ok;
