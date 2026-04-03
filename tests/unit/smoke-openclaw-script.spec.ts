@@ -25,6 +25,29 @@ function fakeOfficialGatewayScript() {
 }
 
 describe("smoke-openclaw script", () => {
+  it("writes smoke acceptance evidence to onclaw/logs/smoke-latest.json", async () => {
+    const logsDir = join(process.cwd(), "onclaw", "logs");
+    const smokeReport = join(logsDir, "smoke-latest.json");
+    await mkdir(logsDir, { recursive: true });
+    await rm(smokeReport, { force: true });
+
+    const { stdout } = await execFileAsync("pwsh", ["./scripts/smoke-openclaw.ps1"], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        ONCLAW_FORCE_PROBE: "1"
+      }
+    });
+    const reportRaw = await readFile(smokeReport, "utf8");
+    const report = JSON.parse(reportRaw) as Record<string, unknown>;
+
+    expect(stdout).toContain("Smoke checks passed");
+    expect(report.passed).toBe(true);
+    expect(report.mode).toBe("probe");
+    expect(report.reason).toBe("forced_probe");
+    expect(report.healthUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/health$/);
+  });
+
   it("uses managed runtime entry under onclaw/runtime and reports probe mode by default", async () => {
     const runtimeDir = join(process.cwd(), "onclaw", "runtime");
     await mkdir(runtimeDir, { recursive: true });

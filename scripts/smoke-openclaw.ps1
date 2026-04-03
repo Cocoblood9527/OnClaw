@@ -3,6 +3,8 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $runtimeDir = Join-Path $repoRoot "onclaw/runtime"
 $runtimeEntry = Join-Path $runtimeDir "openclaw-entry.cjs"
+$logsDir = Join-Path $repoRoot "onclaw/logs"
+$smokeReportPath = Join-Path $logsDir "smoke-latest.json"
 
 Write-Host "Running portable smoke checks..."
 if (!(Test-Path $runtimeDir)) { throw "runtime missing" }
@@ -16,6 +18,8 @@ $listener.Stop()
 
 $env:ONCLAW_HEALTH_HOST = $healthHost
 $env:ONCLAW_HEALTH_PORT = "$healthPort"
+$runtimeMode = "unknown"
+$runtimeReason = "unknown"
 Write-Host "Runtime entry: $runtimeEntry"
 $probeProcess = Start-Process -FilePath "node" -ArgumentList $runtimeEntry -PassThru
 
@@ -26,8 +30,6 @@ try {
     try {
       $response = Invoke-WebRequest -Uri "http://${healthHost}:$healthPort/health" -UseBasicParsing -TimeoutSec 1
       if ($response.StatusCode -eq 200) {
-        $runtimeMode = "unknown"
-        $runtimeReason = "unknown"
         try {
           $healthPayload = $response.Content | ConvertFrom-Json
           if ($healthPayload.mode) {
@@ -52,6 +54,15 @@ try {
   }
 
   Write-Host "Gateway health check passed at http://${healthHost}:$healthPort/health"
+  New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
+  @{
+    timestamp = [DateTimeOffset]::UtcNow.ToString("o")
+    passed = $true
+    mode = $runtimeMode
+    reason = $runtimeReason
+    healthUrl = "http://${healthHost}:$healthPort/health"
+    runtimeEntry = "$runtimeEntry"
+  } | ConvertTo-Json | Set-Content -Path $smokeReportPath -Encoding utf8
   Write-Host "Smoke checks passed"
 }
 finally {
