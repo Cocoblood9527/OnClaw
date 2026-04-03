@@ -66,6 +66,13 @@ const server = createServer((req, res) => {
     </div>
     <script>
       const form = document.getElementById("controls");
+      const initialParams = new URLSearchParams(window.location.search);
+      for (const [key, value] of initialParams.entries()) {
+        const field = form.elements.namedItem(key);
+        if (field && "value" in field) {
+          field.value = value;
+        }
+      }
       async function refresh() {
         const params = new URLSearchParams(new FormData(form));
         const data = await fetch("/api/views?" + params.toString()).then((res) => res.json());
@@ -74,6 +81,7 @@ const server = createServer((req, res) => {
         document.getElementById("settings").textContent = data.settings;
       }
       form.addEventListener("input", refresh);
+      form.addEventListener("change", refresh);
       refresh();
     </script>
   </body>
