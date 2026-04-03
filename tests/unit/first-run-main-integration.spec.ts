@@ -6,11 +6,13 @@ import { describe, expect, it } from "vitest";
 import { renderFirstRunFromMain } from "../../src/renderer/main";
 
 async function withRootDir(run: (rootDir: string) => Promise<void>) {
-  const rootDir = await mkdtemp(join(tmpdir(), "onclaw-first-run-"));
+  const parent = await mkdtemp(join(tmpdir(), "onclaw-first-run-"));
+  const rootDir = join(parent, "onclaw");
+  await mkdir(rootDir, { recursive: true });
   try {
     await run(rootDir);
   } finally {
-    await rm(rootDir, { recursive: true, force: true });
+    await rm(parent, { recursive: true, force: true });
   }
 }
 

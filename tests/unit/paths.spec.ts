@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveOnclawPaths } from "../../src/main/paths";
+import { isOnclawRoot, resolveOnclawPaths } from "../../src/main/paths";
 
 describe("resolveOnclawPaths", () => {
   it("returns root-scoped directories", () => {
@@ -20,5 +20,14 @@ describe("resolveOnclawPaths", () => {
       "D:/onclaw/downloads",
       "D:/onclaw/tmp"
     ]);
+  });
+
+  it("accepts onclaw root path with any path separator style", () => {
+    expect(isOnclawRoot("D:/portable/onclaw")).toBe(true);
+    expect(isOnclawRoot("D:\\portable\\onclaw\\")).toBe(true);
+  });
+
+  it("rejects non-onclaw root path", () => {
+    expect(isOnclawRoot("D:/portable/workspace")).toBe(false);
   });
 });

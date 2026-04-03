@@ -1,6 +1,6 @@
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { resolveOnclawPaths } from "./paths";
+import { isOnclawRoot, resolveOnclawPaths } from "./paths";
 
 export interface SetupSelfCheckReport {
   rootWritable: boolean;
@@ -58,6 +58,20 @@ async function checkProviderReachable(
 
 export async function runSetupSelfCheck(input: RunSetupSelfCheckInput): Promise<SetupSelfCheckReport> {
   const fetcher = input.fetcher ?? fetch;
+  if (!isOnclawRoot(input.rootDir)) {
+    const providerReachable = await checkProviderReachable(
+      input.providerHealthUrl,
+      input.providerAuthToken,
+      fetcher
+    );
+    return {
+      rootWritable: false,
+      runtimePresent: false,
+      providerReachable,
+      ready: false
+    };
+  }
+
   const rootWritable = await checkRootWritable(input.rootDir);
   const runtimePresent = await checkRuntimePresent(input.rootDir);
   const providerReachable = await checkProviderReachable(

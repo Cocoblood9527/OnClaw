@@ -5,15 +5,31 @@ import { describe, expect, it } from "vitest";
 import { runSetupSelfCheck } from "../../src/main/setup-self-check";
 
 async function withRootDir(run: (rootDir: string) => Promise<void>) {
-  const rootDir = await mkdtemp(join(tmpdir(), "onclaw-setup-"));
+  const parent = await mkdtemp(join(tmpdir(), "onclaw-setup-"));
+  const rootDir = join(parent, "onclaw");
+  await mkdir(rootDir, { recursive: true });
   try {
     await run(rootDir);
   } finally {
-    await rm(rootDir, { recursive: true, force: true });
+    await rm(parent, { recursive: true, force: true });
   }
 }
 
 describe("runSetupSelfCheck", () => {
+  it("refuses write/runtime checks when root is outside managed onclaw directory", async () => {
+    const fetcher: typeof fetch = async () => new Response("ok", { status: 200 });
+    const report = await runSetupSelfCheck({
+      rootDir: join(tmpdir(), "outside-root"),
+      providerHealthUrl: "https://provider.test/health",
+      fetcher
+    });
+
+    expect(report.rootWritable).toBe(false);
+    expect(report.runtimePresent).toBe(false);
+    expect(report.providerReachable).toBe(true);
+    expect(report.ready).toBe(false);
+  });
+
   it("passes when root is writable, runtime exists, and provider is reachable", async () => {
     await withRootDir(async (rootDir) => {
       await mkdir(join(rootDir, "runtime"), { recursive: true });
