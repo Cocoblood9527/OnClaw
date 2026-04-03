@@ -6,8 +6,9 @@ repo_root="$(cd "${script_dir}/.." && pwd)"
 install_root="${ONCLAW_INSTALL_ROOT:-${repo_root}/onclaw}"
 skip_npm="${ONCLAW_INSTALL_SKIP_NPM:-0}"
 normalized_root="${install_root%/}"
+normalized_root_lower="$(printf "%s" "${normalized_root}" | tr "[:upper:]" "[:lower:]")"
 
-if [[ ! "${normalized_root}" =~ (^|/)onclaw$ ]]; then
+if [[ ! "${normalized_root_lower}" =~ (^|/)onclaw$ ]]; then
   echo "ONCLAW_INSTALL_ROOT must end with /onclaw" >&2
   exit 1
 fi

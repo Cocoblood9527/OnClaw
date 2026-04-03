@@ -48,6 +48,24 @@ describe("phase2 installer scripts", () => {
     }
   }, 30_000);
 
+  it("install.sh accepts case-insensitive OnClaw root suffix", async () => {
+    const parent = await mkdtemp(join(tmpdir(), "onclaw-install-sh-case-"));
+    const rootDir = join(parent, "OnClaw");
+    try {
+      await execFileAsync("bash", ["./install/install.sh"], {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          ONCLAW_INSTALL_ROOT: rootDir,
+          ONCLAW_INSTALL_SKIP_NPM: "1"
+        }
+      });
+      expect((await stat(join(rootDir, "runtime"))).isDirectory()).toBe(true);
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it("install.ps1 creates managed onclaw layout and runtime entry", async () => {
     const parent = await mkdtemp(join(tmpdir(), "onclaw-install-ps1-"));
     const rootDir = join(parent, "onclaw");
