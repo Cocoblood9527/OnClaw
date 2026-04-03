@@ -19,9 +19,10 @@ describe("setup gating", () => {
       providerReachable: true,
       ready: false
     });
-    expect(setupView).toContain("root:ok");
-    expect(setupView).toContain("runtime:fail");
-    expect(setupView).toContain("provider:ok");
+    expect(setupView).toContain("root: ok");
+    expect(setupView).toContain("runtime: fail");
+    expect(setupView).toContain("provider: ok");
+    expect(setupView).toContain("\n");
   });
 
   it("keeps setup gate when self-check is not ready", async () => {
@@ -38,8 +39,8 @@ describe("setup gating", () => {
     });
 
     expect(view).toContain("Setup");
-    expect(view).toContain("runtime:fail");
-    expect(view).toContain("ready:fail");
+    expect(view).toContain("runtime: fail");
+    expect(view).toContain("ready: fail");
   });
 
   it("enters chat when self-check is ready", async () => {

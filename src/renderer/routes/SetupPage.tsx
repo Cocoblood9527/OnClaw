@@ -8,5 +8,11 @@ export function SetupPage(report?: SetupSelfCheckReport) {
   if (!report) {
     return "Setup";
   }
-  return `Setup|root:${flag(report.rootWritable)}|runtime:${flag(report.runtimePresent)}|provider:${flag(report.providerReachable)}|ready:${flag(report.ready)}`;
+  return [
+    "Setup",
+    `root: ${flag(report.rootWritable)}`,
+    `runtime: ${flag(report.runtimePresent)}`,
+    `provider: ${flag(report.providerReachable)}`,
+    `ready: ${flag(report.ready)}`
+  ].join("\n");
 }
