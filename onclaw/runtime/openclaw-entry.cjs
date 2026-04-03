@@ -9,8 +9,8 @@ const gatewayPort = Number(process.env.ONCLAW_GATEWAY_PORT || String(healthPort 
 
 const runtimeDir = __dirname;
 const onclawRoot = path.resolve(runtimeDir, "..");
-const officialMjsPath =
-  process.env.ONCLAW_OPENCLAW_MJS || path.join(runtimeDir, "node_modules", "openclaw", "openclaw.mjs");
+const bundledOpenClawMjsPath = path.join(runtimeDir, "node_modules", "openclaw", "openclaw.mjs");
+const envOpenClawMjsPath = process.env.ONCLAW_OPENCLAW_MJS;
 
 let mode = "probe";
 let reason = "probe_default";
@@ -27,12 +27,12 @@ function startOfficialGatewayIfAvailable() {
   const configPath = path.join(stateDir, "openclaw.json");
 
   let child = null;
-  if (process.env.ONCLAW_OPENCLAW_MJS) {
-    if (!existsSync(officialMjsPath)) {
+  if (envOpenClawMjsPath) {
+    if (!existsSync(envOpenClawMjsPath)) {
       reason = "official_env_path_missing";
       return;
     }
-    child = spawn(process.execPath, [officialMjsPath, "gateway", "--port", String(gatewayPort)], {
+    child = spawn(process.execPath, [envOpenClawMjsPath, "gateway", "--port", String(gatewayPort)], {
       stdio: "ignore",
       env: {
         ...process.env,
@@ -41,6 +41,16 @@ function startOfficialGatewayIfAvailable() {
       }
     });
     reason = "official_env_path";
+  } else if (existsSync(bundledOpenClawMjsPath)) {
+    child = spawn(process.execPath, [bundledOpenClawMjsPath, "gateway", "--port", String(gatewayPort)], {
+      stdio: "ignore",
+      env: {
+        ...process.env,
+        OPENCLAW_STATE_DIR: stateDir,
+        OPENCLAW_CONFIG_PATH: configPath
+      }
+    });
+    reason = "official_bundled_mjs";
   } else if (process.env.ONCLAW_DISABLE_NPX_OFFICIAL === "1") {
     reason = "official_disabled";
     return;

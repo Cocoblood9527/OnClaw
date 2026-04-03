@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join } from "node:path";
@@ -70,5 +70,73 @@ describe("smoke-openclaw script", () => {
     });
     expect(stdout).toContain("Runtime mode: probe");
     expect(stdout).toContain("Runtime reason: official_env_path_missing");
+  });
+
+  it("prefers bundled openclaw.mjs over npx fallback", async () => {
+    const runtimeDir = join(process.cwd(), "onclaw", "runtime");
+    const bundledPath = join(runtimeDir, "node_modules", "openclaw", "openclaw.mjs");
+    let originalBundled: string | null = null;
+
+    try {
+      originalBundled = await readFile(bundledPath, "utf8");
+    } catch {
+      originalBundled = null;
+    }
+
+    await mkdir(join(runtimeDir, "node_modules", "openclaw"), { recursive: true });
+    await writeFile(
+      bundledPath,
+      [
+        "const hold = setInterval(() => {}, 1000);",
+        "const shutdown = () => { clearInterval(hold); process.exit(0); };",
+        'process.on("SIGTERM", shutdown);',
+        'process.on("SIGINT", shutdown);'
+      ].join("\n"),
+      "utf8"
+    );
+
+    try {
+      const { stdout } = await execFileAsync("pwsh", ["./scripts/smoke-openclaw.ps1"], {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          ONCLAW_DISABLE_NPX_OFFICIAL: "1"
+        }
+      });
+      expect(stdout).toContain("Runtime mode: official");
+      expect(stdout).toContain("Runtime reason: official_bundled_mjs");
+    } finally {
+      if (originalBundled === null) {
+        await rm(bundledPath, { force: true });
+      } else {
+        await writeFile(bundledPath, originalBundled, "utf8");
+      }
+    }
+  });
+
+  it("uses npx fallback when bundled openclaw.mjs is missing", async () => {
+    const runtimeDir = join(process.cwd(), "onclaw", "runtime");
+    const bundledPath = join(runtimeDir, "node_modules", "openclaw", "openclaw.mjs");
+    let originalBundled: string | null = null;
+
+    try {
+      originalBundled = await readFile(bundledPath, "utf8");
+      await rm(bundledPath, { force: true });
+    } catch {
+      originalBundled = null;
+    }
+
+    try {
+      const { stdout } = await execFileAsync("pwsh", ["./scripts/smoke-openclaw.ps1"], {
+        cwd: process.cwd()
+      });
+      expect(stdout).toContain("Runtime mode: official");
+      expect(stdout).toContain("Runtime reason: official_npx_latest");
+    } finally {
+      if (originalBundled !== null) {
+        await mkdir(join(runtimeDir, "node_modules", "openclaw"), { recursive: true });
+        await writeFile(bundledPath, originalBundled, "utf8");
+      }
+    }
   });
 });
