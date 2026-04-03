@@ -11,3 +11,7 @@ export function resolveOnclawPaths(root: string) {
     tmp: `${root}/tmp`
   } as const;
 }
+
+export function resolveActiveRuntimePointer(root: string) {
+  return `${root}/state/active-runtime.json`;
+}
