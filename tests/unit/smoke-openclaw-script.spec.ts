@@ -6,6 +6,24 @@ import { describe, expect, it } from "vitest";
 
 const execFileAsync = promisify(execFile);
 
+function fakeOfficialGatewayScript() {
+  return [
+    'import http from "node:http";',
+    'const host = "127.0.0.1";',
+    'const args = process.argv.slice(2);',
+    'const portIndex = args.indexOf("--port");',
+    "const port = portIndex >= 0 ? Number(args[portIndex + 1]) : 18789;",
+    "const server = http.createServer((req, res) => {",
+    "  res.statusCode = 200;",
+    '  res.end("ok");',
+    "});",
+    "server.listen(port, host);",
+    "const shutdown = () => server.close(() => process.exit(0));",
+    'process.on("SIGTERM", shutdown);',
+    'process.on("SIGINT", shutdown);'
+  ].join("\n");
+}
+
 describe("smoke-openclaw script", () => {
   it("uses managed runtime entry under onclaw/runtime and reports probe mode by default", async () => {
     const runtimeDir = join(process.cwd(), "onclaw", "runtime");
@@ -34,12 +52,7 @@ describe("smoke-openclaw script", () => {
     await mkdir(tmpDir, { recursive: true });
     await writeFile(
       fakeOpenClaw,
-      [
-        "const hold = setInterval(() => {}, 1000);",
-        "const shutdown = () => { clearInterval(hold); process.exit(0); };",
-        'process.on("SIGTERM", shutdown);',
-        'process.on("SIGINT", shutdown);'
-      ].join("\n"),
+      fakeOfficialGatewayScript(),
       "utf8"
     );
 
@@ -86,12 +99,7 @@ describe("smoke-openclaw script", () => {
     await mkdir(join(runtimeDir, "node_modules", "openclaw"), { recursive: true });
     await writeFile(
       bundledPath,
-      [
-        "const hold = setInterval(() => {}, 1000);",
-        "const shutdown = () => { clearInterval(hold); process.exit(0); };",
-        'process.on("SIGTERM", shutdown);',
-        'process.on("SIGINT", shutdown);'
-      ].join("\n"),
+      fakeOfficialGatewayScript(),
       "utf8"
     );
 
