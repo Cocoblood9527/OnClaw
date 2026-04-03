@@ -3,6 +3,14 @@ export interface GatewayConfig {
   token: string;
 }
 
+export type ProviderId = "openai" | "anthropic" | "openrouter";
+
+export interface ProviderDefinition {
+  id: ProviderId;
+  label: string;
+  healthUrl: string;
+}
+
 export interface SetupSelfCheckInput {
   rootDir: string;
   providerHealthUrl: string;
