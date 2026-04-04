@@ -50,7 +50,7 @@ test.describe("dashboard m0", () => {
   test("shows status and supports start/stop/restart", async ({ page }) => {
     await page.goto(`http://127.0.0.1:${DASHBOARD_PREVIEW_PORT}/?runtimePresent=1`);
 
-    await expect(page.getByText("Dashboard")).toBeVisible();
+    await expect(page.locator("#dashboard")).toContainText("Dashboard");
     await expect(page.getByText("status: running")).toBeVisible();
     await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeVisible();
 
