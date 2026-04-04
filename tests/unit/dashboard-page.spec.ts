@@ -28,4 +28,21 @@ describe("DashboardPage", () => {
     expect(view).toContain("status: stopped");
     expect(view).toContain("health: fail");
   });
+
+  it("shows minimal actions and latest action feedback", () => {
+    const view = DashboardPage({
+      url: "http://127.0.0.1:18790",
+      token: "tok_abc123",
+      status: "running",
+      healthy: true,
+      lastAction: {
+        action: "restart",
+        ok: true,
+        message: "ok"
+      }
+    });
+
+    expect(view).toContain("actions: start stop restart");
+    expect(view).toContain("lastAction: restart ok");
+  });
 });
