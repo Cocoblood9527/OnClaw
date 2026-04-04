@@ -47,6 +47,15 @@ function chatOpenState(lastChatOpen?: { ok: boolean; message: string }) {
   return `openChat: ${status} (${lastChatOpen.message})`;
 }
 
+function chatEntryState(gatewayUrl: string, token: string) {
+  try {
+    return `enterChat: ${buildDashboardChatUrl(gatewayUrl, token)}`;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return `enterChat: unavailable (${message})`;
+  }
+}
+
 export function DashboardPage(input: DashboardViewModel) {
   return [
     "Dashboard",
@@ -55,7 +64,7 @@ export function DashboardPage(input: DashboardViewModel) {
     `status: ${input.status}`,
     `health: ${healthLabel(input.healthy)}`,
     "actions: start stop restart",
-    `enterChat: ${buildDashboardChatUrl(input.url, input.token)}`,
+    chatEntryState(input.url, input.token),
     actionState(input.lastAction),
     chatOpenState(input.lastChatOpen)
   ].join("\n");

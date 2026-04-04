@@ -72,4 +72,23 @@ describe("DashboardPage", () => {
     expect(success).toContain("openChat: ok (opened)");
     expect(fail).toContain("openChat: fail (window blocked)");
   });
+
+  it("keeps dashboard renderable when token is missing", () => {
+    expect(() =>
+      DashboardPage({
+        url: "http://127.0.0.1:18790",
+        token: " ",
+        status: "running",
+        healthy: true
+      })
+    ).not.toThrow();
+
+    const view = DashboardPage({
+      url: "http://127.0.0.1:18790",
+      token: " ",
+      status: "running",
+      healthy: true
+    });
+    expect(view).toContain("enterChat: unavailable (missing token)");
+  });
 });

@@ -64,4 +64,24 @@ test.describe("dashboard m0", () => {
     await page.getByRole("button", { name: "Restart", exact: true }).click();
     await expect(page.getByText("lastAction: restart ok")).toBeVisible();
   });
+
+  test("opens chat with localhost gateway port and token", async ({ page }) => {
+    await page.goto(`http://127.0.0.1:${DASHBOARD_PREVIEW_PORT}/?runtimePresent=1&gatewayPort=18791&gatewayToken=tok_m1`);
+
+    const openChatResponsePromise = page.waitForResponse((response) => response.url().includes("/api/open-chat"));
+    await page.getByRole("button", { name: "进入聊天", exact: true }).click();
+    const openChatResponse = await openChatResponsePromise;
+    const openChatResult = await openChatResponse.json();
+
+    await expect(page.getByText("openChat: ok (opened)")).toBeVisible();
+    await expect(page.getByText("enterChat: http://127.0.0.1:18791/chat?token=tok_m1")).toBeVisible();
+    expect(openChatResult.url).toBe("http://127.0.0.1:18791/chat?token=tok_m1");
+  });
+
+  test("shows fail feedback when token is missing", async ({ page }) => {
+    await page.goto(`http://127.0.0.1:${DASHBOARD_PREVIEW_PORT}/?runtimePresent=1&gatewayPort=18791&gatewayToken=`);
+
+    await page.getByRole("button", { name: "进入聊天", exact: true }).click();
+    await expect(page.getByText("openChat: fail")).toBeVisible();
+  });
 });
