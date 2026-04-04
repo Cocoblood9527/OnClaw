@@ -5,6 +5,7 @@ import {
   buildPreviewViews,
   type PreviewInput
 } from "../src/preview/shell";
+import { buildDashboardChatUrl } from "../src/renderer/routes/DashboardPage";
 import {
   GATEWAY_ACTIONS,
   runGatewayAction,
@@ -29,7 +30,19 @@ function parseGatewayAction(value: string | null): GatewayAction | null {
   return GATEWAY_ACTIONS.find((item) => item === value) ?? null;
 }
 
-let dashboardState: { status: "running" | "stopped"; healthy: boolean; lastAction?: GatewayActionResult } = {
+let dashboardState: {
+  url: string;
+  token: string;
+  status: "running" | "stopped";
+  healthy: boolean;
+  lastAction?: GatewayActionResult;
+  lastChatOpen?: {
+    ok: boolean;
+    message: string;
+  };
+} = {
+  url: "http://127.0.0.1:18790",
+  token: "auto-random",
   status: "stopped",
   healthy: false
 };
@@ -38,6 +51,8 @@ let dashboardInitialized = false;
 function syncDashboardFromSetup(runtimePresent: boolean) {
   if (dashboardInitialized) return;
   dashboardState = {
+    url: dashboardState.url,
+    token: dashboardState.token,
     status: runtimePresent ? "running" : "stopped",
     healthy: runtimePresent
   };
@@ -62,7 +77,15 @@ const server = createServer(async (req, res) => {
 
   if (url.pathname === "/api/views") {
     const runtimePresent = parseBoolean(url.searchParams.get("runtimePresent"), false);
+    const gatewayPort = parseNumber(url.searchParams.get("gatewayPort"));
+    const gatewayToken = url.searchParams.get("gatewayToken");
     syncDashboardFromSetup(runtimePresent);
+    if (gatewayPort && gatewayPort > 0) {
+      dashboardState.url = `http://127.0.0.1:${gatewayPort}`;
+    }
+    if (gatewayToken !== null) {
+      dashboardState.token = gatewayToken;
+    }
 
     const views = buildPreviewViews({
       setupRootWritable: parseBoolean(url.searchParams.get("rootWritable"), true),
@@ -72,9 +95,12 @@ const server = createServer(async (req, res) => {
       settingsRootDir: url.searchParams.get("rootDir") ?? undefined,
       settingsTimeoutMs: parseNumber(url.searchParams.get("timeoutMs")),
       settingsRetryCount: parseNumber(url.searchParams.get("retry")),
+      dashboardUrl: dashboardState.url,
+      dashboardToken: dashboardState.token,
       dashboardStatus: dashboardState.status,
       dashboardHealthy: dashboardState.healthy,
-      dashboardLastAction: dashboardState.lastAction
+      dashboardLastAction: dashboardState.lastAction,
+      dashboardLastChatOpen: dashboardState.lastChatOpen
     } satisfies PreviewInput);
 
     res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -99,6 +125,23 @@ const server = createServer(async (req, res) => {
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.end(JSON.stringify(result));
     return;
+  }
+
+  if (url.pathname === "/api/open-chat") {
+    try {
+      const chatUrl = buildDashboardChatUrl(dashboardState.url, dashboardState.token);
+      dashboardState.lastChatOpen = { ok: true, message: "opened" };
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.end(JSON.stringify({ ok: true, url: chatUrl, message: "opened" }));
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      dashboardState.lastChatOpen = { ok: false, message };
+      res.statusCode = 400;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.end(JSON.stringify({ ok: false, message }));
+      return;
+    }
   }
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -131,9 +174,9 @@ const server = createServer(async (req, res) => {
       <nav class="nav"><div class="on">Dashboard</div><div>Setup</div><div>Provider</div><div>Settings</div></nav>
     </aside>
     <main class="main">
-      <div class="top"><h1 class="title">Gateway Dashboard</h1><div style="display:flex;gap:8px"><span class="tag">Localhost Only</span><span class="tag">M0 Scope</span></div></div>
+      <div class="top"><h1 class="title">Gateway Dashboard</h1><div style="display:flex;gap:8px"><span class="tag">Localhost Only</span><span class="tag">M1 Scope</span></div></div>
       <div class="grid">
-        <section class="card runtime"><h2>Runtime</h2><pre id="dashboard"></pre><div class="actions"><button type="button" data-action="start">Start</button><button type="button" data-action="stop">Stop</button><button type="button" data-action="restart">Restart</button></div></section>
+        <section class="card runtime"><h2>Runtime</h2><pre id="dashboard"></pre><div class="actions"><button type="button" data-action="start">Start</button><button type="button" data-action="stop">Stop</button><button type="button" data-action="restart">Restart</button><button type="button" id="open-chat">进入聊天</button></div></section>
         <section class="card"><h2>Setup</h2><pre id="setup"></pre></section>
         <section class="card"><h2>Provider</h2><pre id="provider"></pre></section>
         <section class="card"><h2>Settings</h2><pre id="settings"></pre></section>
@@ -147,6 +190,8 @@ const server = createServer(async (req, res) => {
             <label>Settings rootDir<input name="rootDir" value="onclaw" /></label>
             <label>Timeout ms<input name="timeoutMs" type="number" value="10000" /></label>
             <label>Retry<input name="retry" type="number" value="2" /></label>
+            <label>Gateway port<input name="gatewayPort" type="number" value="18790" /></label>
+            <label>Gateway token<input name="gatewayToken" value="auto-random" /></label>
           </form>
         </section>
       </div>
@@ -171,9 +216,17 @@ const server = createServer(async (req, res) => {
       await fetch("/api/gateway-action?action=" + encodeURIComponent(action), { method: "POST" });
       await refresh();
     }
+    async function openChat() {
+      const result = await fetch("/api/open-chat", { method: "POST" }).then((r) => r.json());
+      if (result.ok && result.url) {
+        window.open(result.url, "_blank", "noopener,noreferrer");
+      }
+      await refresh();
+    }
     document.querySelectorAll("button[data-action]").forEach((button) => {
       button.addEventListener("click", () => runAction(button.dataset.action));
     });
+    document.getElementById("open-chat").addEventListener("click", openChat);
     form.addEventListener("input", refresh);
     form.addEventListener("change", refresh);
     refresh();

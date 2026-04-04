@@ -17,9 +17,15 @@ export interface PreviewInput {
   settingsRootDir?: string;
   settingsTimeoutMs?: number;
   settingsRetryCount?: number;
+  dashboardUrl?: string;
+  dashboardToken?: string;
   dashboardStatus?: "running" | "stopped";
   dashboardHealthy?: boolean;
   dashboardLastAction?: GatewayActionResult;
+  dashboardLastChatOpen?: {
+    ok: boolean;
+    message: string;
+  };
 }
 
 export interface PreviewViews {
@@ -48,11 +54,12 @@ export function buildPreviewViews(input: PreviewInput = {}): PreviewViews {
       providerRetryCount: input.settingsRetryCount
     }),
     dashboard: DashboardPage({
-      url: "http://127.0.0.1:18790",
-      token: "auto-random",
+      url: input.dashboardUrl ?? "http://127.0.0.1:18790",
+      token: input.dashboardToken ?? "auto-random",
       status: input.dashboardStatus ?? (runtimePresent ? "running" : "stopped"),
       healthy: input.dashboardHealthy ?? runtimePresent,
-      lastAction: input.dashboardLastAction
+      lastAction: input.dashboardLastAction,
+      lastChatOpen: input.dashboardLastChatOpen
     })
   };
 }

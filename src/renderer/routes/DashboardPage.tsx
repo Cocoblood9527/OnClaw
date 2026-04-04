@@ -8,6 +8,10 @@ export interface DashboardViewModel {
   status: DashboardStatus;
   healthy: boolean;
   lastAction?: GatewayActionResult;
+  lastChatOpen?: {
+    ok: boolean;
+    message: string;
+  };
 }
 
 export function buildDashboardChatUrl(gatewayUrl: string, token: string) {
@@ -35,6 +39,14 @@ function actionState(lastAction?: GatewayActionResult) {
   return `lastAction: ${lastAction.action} ${status} (${lastAction.message})`;
 }
 
+function chatOpenState(lastChatOpen?: { ok: boolean; message: string }) {
+  if (!lastChatOpen) {
+    return "openChat: none";
+  }
+  const status = lastChatOpen.ok ? "ok" : "fail";
+  return `openChat: ${status} (${lastChatOpen.message})`;
+}
+
 export function DashboardPage(input: DashboardViewModel) {
   return [
     "Dashboard",
@@ -43,6 +55,8 @@ export function DashboardPage(input: DashboardViewModel) {
     `status: ${input.status}`,
     `health: ${healthLabel(input.healthy)}`,
     "actions: start stop restart",
-    actionState(input.lastAction)
+    `enterChat: ${buildDashboardChatUrl(input.url, input.token)}`,
+    actionState(input.lastAction),
+    chatOpenState(input.lastChatOpen)
   ].join("\n");
 }

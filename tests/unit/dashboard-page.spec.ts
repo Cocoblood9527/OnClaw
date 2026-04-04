@@ -45,4 +45,31 @@ describe("DashboardPage", () => {
     expect(view).toContain("actions: start stop restart");
     expect(view).toContain("lastAction: restart ok");
   });
+
+  it("shows enter-chat link and open feedback", () => {
+    const success = DashboardPage({
+      url: "http://127.0.0.1:18790",
+      token: "tok_abc123",
+      status: "running",
+      healthy: true,
+      lastChatOpen: {
+        ok: true,
+        message: "opened"
+      }
+    });
+    const fail = DashboardPage({
+      url: "http://127.0.0.1:18790",
+      token: "tok_abc123",
+      status: "running",
+      healthy: true,
+      lastChatOpen: {
+        ok: false,
+        message: "window blocked"
+      }
+    });
+
+    expect(success).toContain("enterChat: http://127.0.0.1:18790/chat?token=tok_abc123");
+    expect(success).toContain("openChat: ok (opened)");
+    expect(fail).toContain("openChat: fail (window blocked)");
+  });
 });
