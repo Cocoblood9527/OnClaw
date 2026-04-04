@@ -52,6 +52,7 @@ export function SettingsPage(input: Partial<Omit<AdvancedSettings, "tokenMode">>
     `token: ${settings.tokenMode}`,
     `timeoutMs: ${settings.providerTimeoutMs}`,
     `retry: ${settings.providerRetryCount}`,
-    "runReady: ok"
+    "runReady: ok",
+    "action: apply-settings"
   ].join("\n");
 }

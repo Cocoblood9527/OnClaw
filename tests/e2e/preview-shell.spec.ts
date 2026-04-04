@@ -50,13 +50,35 @@ test.describe("preview shell", () => {
   test("hydrates initial state from url and updates in real time", async ({ page }) => {
     await page.goto(`http://127.0.0.1:${PREVIEW_SHELL_PORT}/?provider=openai&runtimePresent=1`);
 
-    await expect(page.getByText("selected: openai")).toBeVisible();
-    await expect(page.getByText("ready: ok")).toBeVisible();
+    await expect(page.locator("#provider")).toContainText("selected: openai");
+    await expect(page.locator("#setup")).toContainText("ready: ok");
 
     await page.selectOption("select[name='provider']", "minimax");
-    await expect(page.getByText("model: MiniMax-M2.7")).toBeVisible();
+    await expect(page.locator("#provider")).toContainText("model: MiniMax-M2.7");
 
     await page.fill("input[name='rootDir']", "/tmp/outside");
-    await expect(page.getByText("root: onclaw")).toBeVisible();
+    await expect(page.locator("#settings")).toContainText("root: onclaw");
+  });
+
+  test("covers setup-provider-settings minimal chain", async ({ page }) => {
+    await page.goto(`http://127.0.0.1:${PREVIEW_SHELL_PORT}/?runtimePresent=0&providerReachable=1&provider=minimax`);
+
+    await expect(page.locator("#setup")).toContainText("action: rerun-self-check");
+
+    await page.selectOption("select[name='runtimePresent']", "1");
+    await expect(page.locator("#setup")).toContainText("ready: ok");
+    await expect(page.locator("#setup")).toContainText("action: continue-provider");
+
+    await page.selectOption("select[name='providerReachable']", "0");
+    await expect(page.locator("#provider")).toContainText("connectivity: fail");
+    await expect(page.locator("#provider")).toContainText("action: switch-provider");
+
+    await page.selectOption("select[name='providerReachable']", "1");
+    await page.fill("input[name='timeoutMs']", "-10");
+    await page.fill("input[name='retry']", "99");
+    await expect(page.locator("#settings")).toContainText("timeoutMs: 10000");
+    await expect(page.locator("#settings")).toContainText("retry: 2");
+    await expect(page.locator("#settings")).toContainText("runReady: ok");
+    await expect(page.locator("#settings")).toContainText("action: apply-settings");
   });
 });

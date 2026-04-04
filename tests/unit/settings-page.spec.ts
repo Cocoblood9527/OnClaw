@@ -50,6 +50,7 @@ describe("SettingsPage", () => {
     });
 
     expect(view).toContain("runReady: ok");
+    expect(view).toContain("action: apply-settings");
     expect(view).toContain("root: onclaw");
     expect(view).toContain("timeoutMs: 10000");
     expect(view).toContain("retry: 2");
