@@ -33,3 +33,26 @@
 
 1. 预览壳中的“打开聊天”成功语义为“URL 构建成功并发起打开请求”，不保证目标 chat 页可达（取决于本机对应端口服务状态）。
 2. 真实主进程与系统浏览器打开行为仍需后续阶段接入 IPC 完整链路，但不影响本次 M1 最小闭环验收。
+
+## 5. 后续收敛（独立 Chat 页面）
+
+日期: 2026-04-04
+
+为贴合 ClawX 使用方式，已做最小收敛：
+
+1. Dashboard 不再内嵌聊天面板，仅保留“进入聊天页”入口。
+2. 点击入口跳转到独立 `/chat` 页面（透传 `gatewayPort/gatewayToken`）。
+3. Chat 页面仍为原生 UI（非 iframe），并保持与 OpenClaw 会话同步。
+
+最小验收清单（已实测）：
+
+1. 打开 `http://127.0.0.1:4174/` 不显示 chat 卡片。
+2. 点击“进入聊天页”后 URL 进入 `/chat?...`。
+3. 在 `/chat` 发送消息后，`openclaw gateway call chat.history` 可查到同一条消息。
+
+质量闸门复验：
+
+1. `npm run build`：PASS
+2. `npm run test:unit`：PASS
+3. `npm run test:e2e`：PASS
+4. `pwsh ./scripts/smoke-openclaw.ps1`：PASS

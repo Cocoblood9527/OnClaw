@@ -68,14 +68,10 @@ test.describe("dashboard m0", () => {
   test("opens chat with localhost gateway port and token", async ({ page }) => {
     await page.goto(`http://127.0.0.1:${DASHBOARD_PREVIEW_PORT}/?runtimePresent=1&gatewayPort=18791&gatewayToken=tok_m1`);
 
-    const openChatResponsePromise = page.waitForResponse((response) => response.url().includes("/api/open-chat"));
     await page.getByRole("button", { name: "进入聊天页", exact: true }).click();
-    const openChatResponse = await openChatResponsePromise;
-    const openChatResult = await openChatResponse.json();
-
-    await expect(page.getByText("openChat: ok (opened)")).toBeVisible();
-    await expect(page.getByText("enterChat: http://127.0.0.1:18791/chat?token=tok_m1")).toBeVisible();
-    expect(openChatResult.url).toBe("http://127.0.0.1:18791/chat?token=tok_m1");
+    await expect(page).toHaveURL(new RegExp(`/chat\\?gatewayPort=18791&gatewayToken=tok_m1$`));
+    await expect(page.getByText("Chat（ClawX 风格）")).toBeVisible();
+    await expect(page.locator("#chat-sync-status")).toContainText("chatSync: connected");
   });
 
   test("shows fail feedback when token is missing", async ({ page }) => {
@@ -85,15 +81,15 @@ test.describe("dashboard m0", () => {
     await expect(page.getByText("openChat: fail")).toBeVisible();
   });
 
-  test("shows native chat panel and no iframe embedding", async ({ page }) => {
+  test("uses standalone chat page (not in dashboard) and no iframe embedding", async ({ page }) => {
     await page.goto(`http://127.0.0.1:${DASHBOARD_PREVIEW_PORT}/?runtimePresent=1&gatewayPort=18793&gatewayToken=tok_sync`);
 
+    await expect(page.locator("section.chat")).toBeHidden();
+    await page.getByRole("button", { name: "进入聊天页", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/chat\\?gatewayPort=18793&gatewayToken=tok_sync$`));
     await expect(page.getByText("Chat（ClawX 风格）")).toBeVisible();
     await expect(page.locator("#chat-messages")).toBeVisible();
     await expect(page.locator("#chat-frame")).toHaveCount(0);
-    await expect(page.locator("#chat-sync-status")).toContainText("chatSync:");
-
-    await page.fill("input[name='gatewayToken']", "");
-    await expect(page.locator("#chat-sync-status")).toContainText("missing gateway port/token");
+    await expect(page.locator("#chat-sync-status")).toContainText("chatSync: connected");
   });
 });

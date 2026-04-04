@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { spawn } from "node:child_process";
 import {
   PREVIEW_HOST,
   PREVIEW_PORT,
@@ -28,6 +29,129 @@ function parseNumber(value: string | null) {
 function parseGatewayAction(value: string | null): GatewayAction | null {
   if (!value) return null;
   return GATEWAY_ACTIONS.find((item) => item === value) ?? null;
+}
+
+function readRequestBody(req: Parameters<typeof createServer>[0]) {
+  return new Promise<string>((resolve, reject) => {
+    let data = "";
+    req.on("data", (chunk) => {
+      data += String(chunk);
+    });
+    req.on("end", () => resolve(data));
+    req.on("error", reject);
+  });
+}
+
+function parseJsonFromCommandOutput(stdout: string, stderr: string) {
+  const candidate = `${stdout}\n${stderr}`;
+  const firstBrace = candidate.indexOf("{");
+  const firstBracket = candidate.indexOf("[");
+  const start = firstBrace === -1 ? firstBracket : firstBracket === -1 ? firstBrace : Math.min(firstBrace, firstBracket);
+  if (start === -1) {
+    throw new Error(`gateway call did not return json: ${candidate.trim() || "empty output"}`);
+  }
+  const payload = candidate.slice(start).trim();
+  return JSON.parse(payload) as Record<string, unknown>;
+}
+
+function runOpenclawGatewayCall(
+  method: string,
+  params: Record<string, unknown>,
+  gatewayPort: number,
+  gatewayToken: string
+) {
+  return new Promise<Record<string, unknown>>((resolve, reject) => {
+    const args = [
+      "gateway",
+      "call",
+      method,
+      "--url",
+      `ws://127.0.0.1:${gatewayPort}`,
+      "--token",
+      gatewayToken,
+      "--params",
+      JSON.stringify(params),
+      "--json"
+    ];
+    const child = spawn("openclaw", args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      try {
+        const parsed = parseJsonFromCommandOutput(stdout, stderr);
+        resolve(parsed);
+        return;
+      } catch {
+        if (code === 0) {
+          reject(new Error(`gateway call parse failed: ${stderr || stdout || "empty output"}`));
+          return;
+        }
+      }
+      reject(new Error((stderr || stdout || `gateway call failed (exit ${code ?? "unknown"})`).trim()));
+    });
+  });
+}
+
+type MockChatMessage = {
+  role: "user" | "assistant";
+  content: Array<{ type: "text"; text: string }>;
+  timestamp: number;
+};
+
+const mockChatSessions = [{ key: "agent:main:main", displayName: "agent:main:main" }];
+const mockChatHistory = new Map<string, MockChatMessage[]>();
+
+function isMockGatewayToken(token: string) {
+  return token === "auto-random" || token.startsWith("tok_");
+}
+
+function runMockChatCall(method: string, params: Record<string, unknown>) {
+  const sessionKey = typeof params.sessionKey === "string" && params.sessionKey.trim()
+    ? params.sessionKey.trim()
+    : "agent:main:main";
+  if (!mockChatHistory.has(sessionKey)) {
+    mockChatHistory.set(sessionKey, []);
+  }
+
+  if (method === "sessions.list") {
+    return { sessions: mockChatSessions };
+  }
+  if (method === "chat.history") {
+    return { sessionKey, messages: mockChatHistory.get(sessionKey) ?? [] };
+  }
+  if (method === "chat.send") {
+    const text = typeof params.message === "string" ? params.message.trim() : "";
+    const history = mockChatHistory.get(sessionKey) ?? [];
+    if (text) {
+      history.push({ role: "user", content: [{ type: "text", text }], timestamp: Date.now() });
+      history.push({ role: "assistant", content: [{ type: "text", text: `Echo: ${text}` }], timestamp: Date.now() + 1 });
+      mockChatHistory.set(sessionKey, history);
+    }
+    return {
+      runId: typeof params.idempotencyKey === "string" ? params.idempotencyKey : `preview-${Date.now()}`,
+      status: "started"
+    };
+  }
+  throw new Error(`unsupported chat method: ${method}`);
+}
+
+async function runChatCall(
+  method: string,
+  params: Record<string, unknown>,
+  gatewayPort: number,
+  gatewayToken: string
+) {
+  if (isMockGatewayToken(gatewayToken)) {
+    return runMockChatCall(method, params);
+  }
+  return await runOpenclawGatewayCall(method, params, gatewayPort, gatewayToken);
 }
 
 let dashboardState: {
@@ -144,6 +268,41 @@ const server = createServer(async (req, res) => {
     }
   }
 
+  if (url.pathname === "/api/chat-rpc") {
+    try {
+      const body = await readRequestBody(req);
+      const payload = body ? JSON.parse(body) as Record<string, unknown> : {};
+      const method = typeof payload.method === "string" ? payload.method.trim() : "";
+      const params = payload.params && typeof payload.params === "object" ? payload.params as Record<string, unknown> : {};
+      const gatewayPort = Number(payload.gatewayPort);
+      const gatewayToken = typeof payload.gatewayToken === "string" ? payload.gatewayToken.trim() : "";
+
+      if (!method) {
+        res.statusCode = 400;
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.end(JSON.stringify({ ok: false, message: "missing method" }));
+        return;
+      }
+      if (!Number.isFinite(gatewayPort) || gatewayPort <= 0 || !gatewayToken) {
+        res.statusCode = 400;
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.end(JSON.stringify({ ok: false, message: "missing gateway port/token" }));
+        return;
+      }
+
+      const result = await runChatCall(method, params, gatewayPort, gatewayToken);
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.end(JSON.stringify({ ok: true, payload: result }));
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      res.statusCode = 500;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.end(JSON.stringify({ ok: false, message }));
+      return;
+    }
+  }
+
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.end(`<!doctype html>
 <html lang="zh-CN">
@@ -223,6 +382,28 @@ const server = createServer(async (req, res) => {
       const field = form.elements.namedItem(key);
       if (field && "value" in field) field.value = value;
     }
+    const isChatPage = window.location.pathname === "/chat";
+    const chatCard = document.querySelector("section.chat");
+    const runtimeCard = document.querySelector("section.runtime");
+    const setupCard = document.getElementById("setup")?.closest("section");
+    const providerCard = document.getElementById("provider")?.closest("section");
+    const settingsCard = document.getElementById("settings")?.closest("section");
+    const devCard = document.querySelector("section.dev");
+    const pageTitle = document.querySelector(".title");
+    const navActive = document.querySelector(".nav .on");
+
+    if (isChatPage) {
+      if (runtimeCard) runtimeCard.style.display = "none";
+      if (setupCard) setupCard.style.display = "none";
+      if (providerCard) providerCard.style.display = "none";
+      if (settingsCard) settingsCard.style.display = "none";
+      if (devCard) devCard.style.display = "none";
+      if (chatCard) chatCard.style.gridColumn = "span 12";
+      if (pageTitle) pageTitle.textContent = "Chat";
+      if (navActive) navActive.textContent = "Chat";
+    } else {
+      if (chatCard) chatCard.style.display = "none";
+    }
 
     const chatSyncStatus = document.getElementById("chat-sync-status");
     const chatMessages = document.getElementById("chat-messages");
@@ -233,6 +414,7 @@ const server = createServer(async (req, res) => {
 
     const chatState = {
       client: null,
+      useProxy: false,
       sessionKey: "",
       sessions: [],
       gatewayPort: "",
@@ -357,7 +539,7 @@ const server = createServer(async (req, res) => {
                   minProtocol: 3,
                   maxProtocol: 3,
                   client: {
-                    id: "onclaw-preview",
+                    id: "gateway-client",
                     displayName: "OnClaw Dashboard",
                     version: "0.1.0",
                     platform: navigator.platform,
@@ -460,6 +642,34 @@ const server = createServer(async (req, res) => {
       return { port: rawPort, token: rawToken };
     }
 
+    function toErrorMessage(error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+
+    function shouldFallbackToProxy(error) {
+      const message = toErrorMessage(error).toLowerCase();
+      return message.includes("missing scope:") || message.includes("websocket error") || message.includes("gateway websocket closed");
+    }
+
+    async function callProxyRpc(method, params) {
+      const cfg = getGatewayConfigFromForm();
+      const response = await fetch("/api/chat-rpc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        body: JSON.stringify({
+          method,
+          params: params || {},
+          gatewayPort: cfg.port,
+          gatewayToken: cfg.token
+        })
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) {
+        throw new Error(String(result.message || "chat proxy failed"));
+      }
+      return result.payload || {};
+    }
+
     function disconnectChatClient() {
       stopChatPolling();
       if (chatState.client) {
@@ -472,9 +682,10 @@ const server = createServer(async (req, res) => {
       const cfg = getGatewayConfigFromForm();
       if (!cfg.port || !cfg.token) {
         disconnectChatClient();
+        chatState.useProxy = false;
         setChatStatus("chatSync: fail (missing gateway port/token)");
         renderChatMessages([]);
-        return null;
+        return false;
       }
 
       const changed = chatState.gatewayPort !== cfg.port || chatState.gatewayToken !== cfg.token;
@@ -482,6 +693,12 @@ const server = createServer(async (req, res) => {
         disconnectChatClient();
         chatState.gatewayPort = cfg.port;
         chatState.gatewayToken = cfg.token;
+        chatState.useProxy = false;
+      }
+
+      if (chatState.useProxy) {
+        startChatPolling();
+        return true;
       }
 
       if (!chatState.client) {
@@ -491,20 +708,28 @@ const server = createServer(async (req, res) => {
       try {
         await chatState.client.connect();
         startChatPolling();
-        return chatState.client;
-      } catch (error) {
+        return true;
+      } catch {
         disconnectChatClient();
-        setChatStatus("chatSync: fail (" + (error instanceof Error ? error.message : String(error)) + ")");
-        return null;
+        chatState.useProxy = true;
+        startChatPolling();
+        return true;
       }
     }
 
+    async function callChatRpc(method, params, timeoutMs) {
+      if (!chatState.useProxy && chatState.client) {
+        return await chatState.client.rpc(method, params, timeoutMs);
+      }
+      return await callProxyRpc(method, params);
+    }
+
     async function loadChatSessionsAndHistory() {
-      const client = await ensureChatClient();
-      if (!client) return;
+      const ready = await ensureChatClient();
+      if (!ready) return;
 
       try {
-        const sessionsResult = await client.rpc("sessions.list", {});
+        const sessionsResult = await callChatRpc("sessions.list", {});
         const sessions = Array.isArray(sessionsResult.sessions) ? sessionsResult.sessions : [];
         const normalized = sessions
           .map((item) => ({
@@ -531,10 +756,15 @@ const server = createServer(async (req, res) => {
           chatSession.appendChild(option);
         }
         chatSession.value = chatState.sessionKey;
-
-        await loadChatHistory(false);
+        setChatStatus("chatSync: connected");
+        await loadChatHistory(true);
       } catch (error) {
-        setChatStatus("chatSync: fail (" + (error instanceof Error ? error.message : String(error)) + ")");
+        if (!chatState.useProxy && shouldFallbackToProxy(error)) {
+          chatState.useProxy = true;
+          await loadChatSessionsAndHistory();
+          return;
+        }
+        setChatStatus("chatSync: fail (" + toErrorMessage(error) + ")");
       }
     }
 
@@ -542,12 +772,12 @@ const server = createServer(async (req, res) => {
       if (chatState.loadingHistory) return;
       if (!chatState.sessionKey) return;
 
-      const client = await ensureChatClient();
-      if (!client) return;
+      const ready = await ensureChatClient();
+      if (!ready) return;
       chatState.loadingHistory = true;
 
       try {
-        const history = await client.rpc("chat.history", {
+        const history = await callChatRpc("chat.history", {
           sessionKey: chatState.sessionKey,
           limit: 80
         });
@@ -557,8 +787,13 @@ const server = createServer(async (req, res) => {
           setChatStatus("chatSync: connected");
         }
       } catch (error) {
+        if (!chatState.useProxy && shouldFallbackToProxy(error)) {
+          chatState.useProxy = true;
+          await loadChatHistory(silent);
+          return;
+        }
         if (!silent) {
-          setChatStatus("chatSync: fail (" + (error instanceof Error ? error.message : String(error)) + ")");
+          setChatStatus("chatSync: fail (" + toErrorMessage(error) + ")");
         }
       } finally {
         chatState.loadingHistory = false;
@@ -573,14 +808,14 @@ const server = createServer(async (req, res) => {
         if (!chatState.sessionKey) return;
       }
 
-      const client = await ensureChatClient();
-      if (!client) return;
+      const ready = await ensureChatClient();
+      if (!ready) return;
 
       chatSend.disabled = true;
       setChatStatus("chatSync: sending");
 
       try {
-        await client.rpc("chat.send", {
+        await callChatRpc("chat.send", {
           sessionKey: chatState.sessionKey,
           message: text,
           deliver: false,
@@ -590,7 +825,12 @@ const server = createServer(async (req, res) => {
         await loadChatHistory(false);
         setTimeout(() => { void loadChatHistory(true); }, 1500);
       } catch (error) {
-        setChatStatus("chatSync: fail (" + (error instanceof Error ? error.message : String(error)) + ")");
+        if (!chatState.useProxy && shouldFallbackToProxy(error)) {
+          chatState.useProxy = true;
+          await sendChatMessage();
+          return;
+        }
+        setChatStatus("chatSync: fail (" + toErrorMessage(error) + ")");
       } finally {
         chatSend.disabled = false;
       }
@@ -603,7 +843,9 @@ const server = createServer(async (req, res) => {
       document.getElementById("setup").textContent = data.setup;
       document.getElementById("provider").textContent = data.provider;
       document.getElementById("settings").textContent = data.settings;
-      await loadChatSessionsAndHistory();
+      if (isChatPage) {
+        await loadChatSessionsAndHistory();
+      }
     }
 
     async function runAction(action) {
@@ -612,10 +854,17 @@ const server = createServer(async (req, res) => {
     }
 
     async function openChat() {
-      const result = await fetch("/api/open-chat", { method: "POST" }).then((r) => r.json());
-      if (result.ok && result.url) {
-        window.open(result.url, "_blank", "noopener,noreferrer");
+      const cfg = getGatewayConfigFromForm();
+      if (cfg.port && cfg.token) {
+        const params = new URLSearchParams({
+          gatewayPort: cfg.port,
+          gatewayToken: cfg.token
+        });
+        window.location.href = "/chat?" + params.toString();
+        return;
       }
+
+      await fetch("/api/open-chat", { method: "POST" }).then((r) => r.json());
       await refresh();
     }
 
@@ -624,22 +873,24 @@ const server = createServer(async (req, res) => {
     });
     document.getElementById("open-chat").addEventListener("click", openChat);
 
-    chatRefresh.addEventListener("click", () => {
-      void loadChatSessionsAndHistory();
-    });
-    chatSession.addEventListener("change", () => {
-      chatState.sessionKey = chatSession.value;
-      void loadChatHistory(false);
-    });
-    chatSend.addEventListener("click", () => {
-      void sendChatMessage();
-    });
-    chatInput.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
+    if (isChatPage) {
+      chatRefresh.addEventListener("click", () => {
+        void loadChatSessionsAndHistory();
+      });
+      chatSession.addEventListener("change", () => {
+        chatState.sessionKey = chatSession.value;
+        void loadChatHistory(false);
+      });
+      chatSend.addEventListener("click", () => {
         void sendChatMessage();
-      }
-    });
+      });
+      chatInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          void sendChatMessage();
+        }
+      });
+    }
 
     form.addEventListener("input", () => { void refresh(); });
     form.addEventListener("change", () => { void refresh(); });
