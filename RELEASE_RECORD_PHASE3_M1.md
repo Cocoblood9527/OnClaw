@@ -18,7 +18,7 @@
 
 1. `npm run build`：PASS
 2. `npm run test:unit`：PASS（18 files, 61 tests）
-3. `npm run test:e2e`：PASS（6 tests）
+3. `npm run test:e2e`：PASS（8 tests）
 4. `pwsh ./scripts/smoke-openclaw.ps1`：PASS（mode=official, reason=official_bundled_mjs）
 
 ## 3. 自动 Review 与修复闭环
