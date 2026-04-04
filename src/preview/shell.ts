@@ -5,7 +5,9 @@ import { SettingsPage } from "../renderer/routes/SettingsPage.js";
 import { SetupPage } from "../renderer/routes/SetupPage.js";
 
 export const PREVIEW_HOST = "127.0.0.1";
-export const PREVIEW_PORT = 4174;
+const DEFAULT_PREVIEW_PORT = 4174;
+const configuredPreviewPort = Number(process.env.ONCLAW_PREVIEW_PORT ?? DEFAULT_PREVIEW_PORT);
+export const PREVIEW_PORT = Number.isFinite(configuredPreviewPort) && configuredPreviewPort > 0 ? configuredPreviewPort : DEFAULT_PREVIEW_PORT;
 
 export interface PreviewInput {
   setupRootWritable?: boolean;

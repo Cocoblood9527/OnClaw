@@ -1,9 +1,15 @@
 import { spawn } from "node:child_process";
 import { test, expect } from "@playwright/test";
 
+const DASHBOARD_PREVIEW_PORT = 4175;
+
 function startPreviewShell() {
   const child = spawn("npm", ["run", "preview:shell"], {
-    stdio: ["ignore", "pipe", "pipe"]
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      ONCLAW_PREVIEW_PORT: String(DASHBOARD_PREVIEW_PORT)
+    }
   });
 
   return new Promise<{ stop: () => Promise<void> }>((resolve, reject) => {
@@ -13,7 +19,7 @@ function startPreviewShell() {
     }, 20_000);
 
     const onData = (chunk: Buffer) => {
-      if (chunk.toString("utf8").includes("http://127.0.0.1:4174")) {
+      if (chunk.toString("utf8").includes(`http://127.0.0.1:${DASHBOARD_PREVIEW_PORT}`)) {
         clearTimeout(timeout);
         child.stdout.off("data", onData);
         resolve({
@@ -42,7 +48,7 @@ test.describe("dashboard m0", () => {
   });
 
   test("shows status and supports start/stop/restart", async ({ page }) => {
-    await page.goto("http://127.0.0.1:4174/?runtimePresent=1");
+    await page.goto(`http://127.0.0.1:${DASHBOARD_PREVIEW_PORT}/?runtimePresent=1`);
 
     await expect(page.getByText("Dashboard")).toBeVisible();
     await expect(page.getByText("status: running")).toBeVisible();
