@@ -11,6 +11,7 @@ describe("preview shell", () => {
 
     expect(views.setup).toContain("Setup");
     expect(views.provider).toContain("selected: minimax");
+    expect(views.provider).toContain("connectivity: ok");
     expect(views.provider).toContain("model: MiniMax-M2.7");
     expect(views.provider).toContain("docs: https://platform.minimaxi.com/docs/api-reference/text-openai-api");
     expect(views.settings).toContain("host: 127.0.0.1");
@@ -32,6 +33,7 @@ describe("preview shell", () => {
     expect(blocked.settings).toContain("root: onclaw");
     expect(tuned.setup).toContain("ready: ok");
     expect(tuned.provider).toContain("selected: openai");
+    expect(tuned.provider).toContain("connectivity: ok");
     expect(tuned.settings).toContain("root: /tmp/onclaw");
     expect(tuned.settings).toContain("timeoutMs: 15000");
     expect(tuned.settings).toContain("retry: 1");

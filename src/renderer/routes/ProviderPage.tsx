@@ -35,6 +35,13 @@ export function listMinimalProviders(): ProviderDefinition[] {
   return [...MINIMAL_PROVIDERS];
 }
 
+function connectivityLabel(providerReachable?: boolean) {
+  if (providerReachable === undefined) {
+    return "unknown";
+  }
+  return providerReachable ? "ok" : "fail";
+}
+
 function pickSelectedProvider(selectedProviderId?: string): ProviderDefinition {
   if (!selectedProviderId) {
     return MINIMAL_PROVIDERS[0];
@@ -43,14 +50,16 @@ function pickSelectedProvider(selectedProviderId?: string): ProviderDefinition {
   return provider ?? MINIMAL_PROVIDERS[0];
 }
 
-export function ProviderPage(selectedProviderId?: string) {
+export function ProviderPage(selectedProviderId?: string, providerReachable?: boolean) {
   const selected = pickSelectedProvider(selectedProviderId);
   return [
     "Provider",
     ...MINIMAL_PROVIDERS.map((provider) => `${provider.id}: ${provider.label}`),
     `selected: ${selected.id}`,
+    `connectivity: ${connectivityLabel(providerReachable)}`,
     `health: ${selected.healthUrl}`,
     `model: ${selected.defaultModel}`,
-    `docs: ${selected.docUrl}`
+    `docs: ${selected.docUrl}`,
+    "action: switch-provider"
   ].join("\n");
 }

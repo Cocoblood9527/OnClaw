@@ -47,7 +47,7 @@ export function buildPreviewViews(input: PreviewInput = {}): PreviewViews {
       providerReachable,
       ready: rootWritable && runtimePresent && providerReachable
     }),
-    provider: ProviderPage(input.providerId ?? "minimax"),
+    provider: ProviderPage(input.providerId ?? "minimax", providerReachable),
     settings: SettingsPage({
       rootDir: input.settingsRootDir,
       providerTimeoutMs: input.settingsTimeoutMs,
