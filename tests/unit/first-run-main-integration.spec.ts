@@ -40,6 +40,35 @@ async function withProviderServer(
   });
 }
 
+async function withAuthProviderServer(
+  expectedAuthorization: string,
+  run: (providerHealthUrl: string) => Promise<void>
+) {
+  await new Promise<void>((resolve, reject) => {
+    const server = createServer((req, res) => {
+      const authorization = req.headers.authorization;
+      if (authorization === expectedAuthorization) {
+        res.statusCode = 200;
+      } else {
+        res.statusCode = 401;
+      }
+      res.end("ok");
+    });
+    server.listen(0, "127.0.0.1", async () => {
+      try {
+        const address = server.address();
+        if (!address || typeof address === "string") {
+          throw new Error("provider auth test server did not expose tcp address");
+        }
+        await run(`http://127.0.0.1:${address.port}/health`);
+        server.close((error) => (error ? reject(error) : resolve()));
+      } catch (error) {
+        server.close(() => reject(error));
+      }
+    });
+  });
+}
+
 describe("first run integration", () => {
   it("returns setup view when runtime is missing even if provider is reachable", async () => {
     await withRootDir(async (rootDir) => {
@@ -57,6 +86,20 @@ describe("first run integration", () => {
       await mkdir(join(rootDir, "runtime"), { recursive: true });
       await withProviderServer(200, async (providerHealthUrl) => {
         const view = await renderFirstRunFromMain({ rootDir, providerHealthUrl });
+        expect(view).toBe("Chat");
+      });
+    });
+  });
+
+  it("passes provider auth token through main process chain", async () => {
+    await withRootDir(async (rootDir) => {
+      await mkdir(join(rootDir, "runtime"), { recursive: true });
+      await withAuthProviderServer("Bearer token-main", async (providerHealthUrl) => {
+        const view = await renderFirstRunFromMain({
+          rootDir,
+          providerHealthUrl,
+          providerAuthToken: "  token-main  "
+        });
         expect(view).toBe("Chat");
       });
     });
