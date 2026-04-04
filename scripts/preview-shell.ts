@@ -72,6 +72,18 @@ function applyDashboardAction(result: GatewayActionResult) {
   dashboardState.lastAction = result;
 }
 
+function getChatEmbedState() {
+  try {
+    return {
+      chatUrl: buildDashboardChatUrl(dashboardState.url, dashboardState.token),
+      chatError: null as string | null
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { chatUrl: "", chatError: message };
+  }
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://127.0.0.1");
 
@@ -102,9 +114,10 @@ const server = createServer(async (req, res) => {
       dashboardLastAction: dashboardState.lastAction,
       dashboardLastChatOpen: dashboardState.lastChatOpen
     } satisfies PreviewInput);
+    const chatEmbed = getChatEmbedState();
 
     res.setHeader("Content-Type", "application/json; charset=utf-8");
-    res.end(JSON.stringify(views));
+    res.end(JSON.stringify({ ...views, ...chatEmbed }));
     return;
   }
 
@@ -163,6 +176,7 @@ const server = createServer(async (req, res) => {
     .runtime{grid-column:span 8}.dev{grid-column:span 12} h2{margin:0 0 8px;font-size:15px} pre{margin:0;white-space:pre-wrap;font-family:ui-monospace,monospace;line-height:1.45}
     .actions{display:flex;gap:8px;margin-top:10px} button{padding:7px 11px;border-radius:8px;border:1px solid #33587f;background:#18406a;color:#eaf4ff;cursor:pointer}
     .controls{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))} label{display:grid;gap:4px;font-size:12px;color:var(--muted)} input,select{padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:#0b1624;color:var(--text)}
+    .chat{grid-column:span 12}.chat-frame{width:100%;height:420px;border:1px solid var(--line);border-radius:10px;background:#0b1624}
     @media(max-width:960px){.app{grid-template-columns:1fr}.side{border-right:0;border-bottom:1px solid var(--line)}.card,.runtime,.dev{grid-column:span 12}}
   </style>
 </head>
@@ -180,6 +194,7 @@ const server = createServer(async (req, res) => {
         <section class="card"><h2>Setup</h2><pre id="setup"></pre></section>
         <section class="card"><h2>Provider</h2><pre id="provider"></pre></section>
         <section class="card"><h2>Settings</h2><pre id="settings"></pre></section>
+        <section class="card chat"><h2>Chat（与 OpenClaw 同步）</h2><div id="chat-embed-status" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div><iframe id="chat-frame" class="chat-frame" title="OpenClaw Chat" referrerpolicy="no-referrer"></iframe></section>
         <section class="card dev">
           <h2>Dev Controls</h2>
           <form id="controls" class="controls">
@@ -211,6 +226,15 @@ const server = createServer(async (req, res) => {
       document.getElementById("setup").textContent = data.setup;
       document.getElementById("provider").textContent = data.provider;
       document.getElementById("settings").textContent = data.settings;
+      const chatFrame = document.getElementById("chat-frame");
+      const chatStatus = document.getElementById("chat-embed-status");
+      if (data.chatUrl) {
+        chatFrame.src = data.chatUrl;
+        chatStatus.textContent = "chatEmbed: ok";
+      } else {
+        chatFrame.removeAttribute("src");
+        chatStatus.textContent = "chatEmbed: fail (" + (data.chatError || "unavailable") + ")";
+      }
     }
     async function runAction(action) {
       await fetch("/api/gateway-action?action=" + encodeURIComponent(action), { method: "POST" });

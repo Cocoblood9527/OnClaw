@@ -84,4 +84,16 @@ test.describe("dashboard m0", () => {
     await page.getByRole("button", { name: "进入聊天", exact: true }).click();
     await expect(page.getByText("openChat: fail")).toBeVisible();
   });
+
+  test("embeds openclaw chat in dashboard and tracks gateway params", async ({ page }) => {
+    await page.goto(`http://127.0.0.1:${DASHBOARD_PREVIEW_PORT}/?runtimePresent=1&gatewayPort=18793&gatewayToken=tok_sync`);
+
+    const chatFrame = page.locator("#chat-frame");
+    await expect(chatFrame).toBeVisible();
+    await expect(chatFrame).toHaveAttribute("src", "http://127.0.0.1:18793/chat?token=tok_sync");
+
+    await page.fill("input[name='gatewayPort']", "18794");
+    await page.fill("input[name='gatewayToken']", "tok_changed");
+    await expect(chatFrame).toHaveAttribute("src", "http://127.0.0.1:18794/chat?token=tok_changed");
+  });
 });
