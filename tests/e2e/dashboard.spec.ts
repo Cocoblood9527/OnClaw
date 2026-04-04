@@ -90,10 +90,10 @@ test.describe("dashboard m0", () => {
 
     const chatFrame = page.locator("#chat-frame");
     await expect(chatFrame).toBeVisible();
-    await expect(chatFrame).toHaveAttribute("src", "http://127.0.0.1:18793/chat?token=tok_sync");
+    await expect(chatFrame).toHaveAttribute("src", "/embed-chat/?token=tok_sync");
 
     await page.fill("input[name='gatewayPort']", "18794");
     await page.fill("input[name='gatewayToken']", "tok_changed");
-    await expect(chatFrame).toHaveAttribute("src", "http://127.0.0.1:18794/chat?token=tok_changed");
+    await expect(chatFrame).toHaveAttribute("src", "/embed-chat/?token=tok_changed");
   });
 });

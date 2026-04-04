@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { connect } from "node:net";
 import {
   PREVIEW_HOST,
   PREVIEW_PORT,
@@ -28,6 +29,23 @@ function parseNumber(value: string | null) {
 function parseGatewayAction(value: string | null): GatewayAction | null {
   if (!value) return null;
   return GATEWAY_ACTIONS.find((item) => item === value) ?? null;
+}
+
+const HOP_BY_HOP_HEADERS = new Set([
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade"
+]);
+
+function resolveGatewayTarget() {
+  const parsed = new URL(dashboardState.url);
+  const port = Number(parsed.port || (parsed.protocol === "https:" ? "443" : "80"));
+  return { host: "127.0.0.1", port };
 }
 
 let dashboardState: {
@@ -74,8 +92,12 @@ function applyDashboardAction(result: GatewayActionResult) {
 
 function getChatEmbedState() {
   try {
+    const token = dashboardState.token.trim();
+    if (!token) {
+      throw new Error("missing token");
+    }
     return {
-      chatUrl: buildDashboardChatUrl(dashboardState.url, dashboardState.token),
+      chatUrl: `/embed-chat/?token=${encodeURIComponent(token)}`,
       chatError: null as string | null
     };
   } catch (error) {
@@ -84,8 +106,76 @@ function getChatEmbedState() {
   }
 }
 
+async function proxyToGateway(req: Parameters<typeof createServer>[0], res: Parameters<typeof createServer>[1], pathname: string, searchParams: URLSearchParams) {
+  try {
+    const gateway = resolveGatewayTarget();
+    const query = searchParams.toString();
+    const upstreamUrl = `http://${gateway.host}:${gateway.port}${pathname}${query ? `?${query}` : ""}`;
+    const method = req.method ?? "GET";
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(req.headers)) {
+      if (!value) continue;
+      if (HOP_BY_HOP_HEADERS.has(key.toLowerCase())) continue;
+      if (key.toLowerCase() === "host") continue;
+      headers[key] = Array.isArray(value) ? value.join(", ") : value;
+    }
+    const hasBody = method !== "GET" && method !== "HEAD";
+    const bodyChunks: Buffer[] = [];
+    if (hasBody) {
+      for await (const chunk of req) {
+        bodyChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+    }
+
+    const upstream = await fetch(upstreamUrl, {
+      method,
+      headers,
+      body: hasBody ? Buffer.concat(bodyChunks) : undefined
+    });
+    const payload = Buffer.from(await upstream.arrayBuffer());
+    res.statusCode = upstream.status;
+    for (const [key, value] of upstream.headers.entries()) {
+      const lowered = key.toLowerCase();
+      if (HOP_BY_HOP_HEADERS.has(lowered)) continue;
+      if (lowered === "x-frame-options") continue;
+      if (lowered === "content-security-policy") continue;
+      res.setHeader(key, value);
+    }
+    res.setHeader("Content-Length", String(payload.length));
+    res.end(payload);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    res.statusCode = 502;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.end(`gateway proxy failed: ${message}`);
+  }
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://127.0.0.1");
+
+  if (url.pathname === "/embed-chat") {
+    res.statusCode = 302;
+    res.setHeader("Location", `/embed-chat/${url.search}`);
+    res.end();
+    return;
+  }
+
+  if (url.pathname.startsWith("/embed-chat/")) {
+    const restPath = url.pathname.slice("/embed-chat".length);
+    const upstreamPath = `/chat${restPath}`;
+    const searchParams = new URLSearchParams(url.search);
+    if ((restPath === "/" || restPath === "") && !searchParams.has("token")) {
+      searchParams.set("token", dashboardState.token);
+    }
+    await proxyToGateway(req, res, upstreamPath, searchParams);
+    return;
+  }
+
+  if (url.pathname.startsWith("/__openclaw/")) {
+    await proxyToGateway(req, res, url.pathname, new URLSearchParams(url.search));
+    return;
+  }
 
   if (url.pathname === "/api/views") {
     const runtimePresent = parseBoolean(url.searchParams.get("runtimePresent"), false);
@@ -257,6 +347,42 @@ const server = createServer(async (req, res) => {
   </script>
 </body>
 </html>`);
+});
+
+server.on("upgrade", (req, socket, head) => {
+  if ((req.headers.upgrade ?? "").toLowerCase() !== "websocket") {
+    socket.destroy();
+    return;
+  }
+
+  let gateway;
+  try {
+    gateway = resolveGatewayTarget();
+  } catch {
+    socket.destroy();
+    return;
+  }
+
+  const upstream = connect(gateway.port, gateway.host, () => {
+    const headerLines = [`GET ${req.url ?? "/"} HTTP/1.1`];
+    for (let index = 0; index < req.rawHeaders.length; index += 2) {
+      const key = req.rawHeaders[index];
+      const value = req.rawHeaders[index + 1] ?? "";
+      if (key.toLowerCase() === "host") continue;
+      headerLines.push(`${key}: ${value}`);
+    }
+    headerLines.push(`Host: ${gateway.host}:${gateway.port}`);
+    headerLines.push("", "");
+    upstream.write(headerLines.join("\r\n"));
+    if (head.length > 0) {
+      upstream.write(head);
+    }
+    socket.pipe(upstream);
+    upstream.pipe(socket);
+  });
+
+  upstream.on("error", () => socket.destroy());
+  socket.on("error", () => upstream.destroy());
 });
 
 server.listen(PREVIEW_PORT, PREVIEW_HOST, () => {
