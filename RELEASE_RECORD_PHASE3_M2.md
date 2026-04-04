@@ -1,6 +1,6 @@
 # OnClaw Phase 3 M2 Release Record
 
-日期: 2026-04-04  
+日期: 2026-04-04
 分支: `codex/phase1-windows-portable`
 
 ## 1. 范围确认（YAGNI）
