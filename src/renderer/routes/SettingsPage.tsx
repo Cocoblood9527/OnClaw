@@ -9,10 +9,30 @@ const DEFAULT_ADVANCED_SETTINGS: AdvancedSettings = {
   providerRetryCount: 2
 };
 
+function normalizeTimeoutMs(timeoutMs?: number) {
+  if (timeoutMs === undefined) {
+    return DEFAULT_ADVANCED_SETTINGS.providerTimeoutMs;
+  }
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 120_000) {
+    return DEFAULT_ADVANCED_SETTINGS.providerTimeoutMs;
+  }
+  return Math.floor(timeoutMs);
+}
+
+function normalizeRetryCount(retryCount?: number) {
+  if (retryCount === undefined) {
+    return DEFAULT_ADVANCED_SETTINGS.providerRetryCount;
+  }
+  if (!Number.isInteger(retryCount) || retryCount < 0 || retryCount > 5) {
+    return DEFAULT_ADVANCED_SETTINGS.providerRetryCount;
+  }
+  return retryCount;
+}
+
 export function normalizeAdvancedSettings(input: Partial<Omit<AdvancedSettings, "tokenMode">> = {}): AdvancedSettings {
   const rootDir = input.rootDir && isOnclawRoot(input.rootDir) ? input.rootDir : DEFAULT_ADVANCED_SETTINGS.rootDir;
-  const timeoutMs = input.providerTimeoutMs ?? DEFAULT_ADVANCED_SETTINGS.providerTimeoutMs;
-  const retryCount = input.providerRetryCount ?? DEFAULT_ADVANCED_SETTINGS.providerRetryCount;
+  const timeoutMs = normalizeTimeoutMs(input.providerTimeoutMs);
+  const retryCount = normalizeRetryCount(input.providerRetryCount);
 
   return {
     rootDir,
@@ -31,6 +51,7 @@ export function SettingsPage(input: Partial<Omit<AdvancedSettings, "tokenMode">>
     `host: ${settings.host}`,
     `token: ${settings.tokenMode}`,
     `timeoutMs: ${settings.providerTimeoutMs}`,
-    `retry: ${settings.providerRetryCount}`
+    `retry: ${settings.providerRetryCount}`,
+    "runReady: ok"
   ].join("\n");
 }

@@ -31,4 +31,27 @@ describe("SettingsPage", () => {
     expect(view).toContain("retry: 1");
     expect(view).toContain("root: /tmp/onclaw");
   });
+
+  it("falls back to secure runtime defaults when tuning is invalid", () => {
+    const settings = normalizeAdvancedSettings({
+      providerTimeoutMs: 0,
+      providerRetryCount: -1
+    });
+
+    expect(settings.providerTimeoutMs).toBe(10_000);
+    expect(settings.providerRetryCount).toBe(2);
+  });
+
+  it("shows run-ready state after normalization", () => {
+    const view = SettingsPage({
+      rootDir: "/tmp/outside",
+      providerTimeoutMs: -10,
+      providerRetryCount: 99
+    });
+
+    expect(view).toContain("runReady: ok");
+    expect(view).toContain("root: onclaw");
+    expect(view).toContain("timeoutMs: 10000");
+    expect(view).toContain("retry: 2");
+  });
 });
