@@ -4,6 +4,10 @@ function flag(ok: boolean) {
   return ok ? "ok" : "fail";
 }
 
+function nextAction(ready: boolean) {
+  return ready ? "continue-provider" : "rerun-self-check";
+}
+
 export function SetupPage(report?: SetupSelfCheckReport) {
   if (!report) {
     return "Setup";
@@ -13,6 +17,7 @@ export function SetupPage(report?: SetupSelfCheckReport) {
     `root: ${flag(report.rootWritable)}`,
     `runtime: ${flag(report.runtimePresent)}`,
     `provider: ${flag(report.providerReachable)}`,
-    `ready: ${flag(report.ready)}`
+    `ready: ${flag(report.ready)}`,
+    `action: ${nextAction(report.ready)}`
   ].join("\n");
 }

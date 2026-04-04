@@ -22,6 +22,7 @@ describe("setup gating", () => {
     expect(setupView).toContain("root: ok");
     expect(setupView).toContain("runtime: fail");
     expect(setupView).toContain("provider: ok");
+    expect(setupView).toContain("action: rerun-self-check");
     expect(setupView).toContain("\n");
   });
 
@@ -41,6 +42,7 @@ describe("setup gating", () => {
     expect(view).toContain("Setup");
     expect(view).toContain("runtime: fail");
     expect(view).toContain("ready: fail");
+    expect(view).toContain("action: rerun-self-check");
   });
 
   it("enters chat when self-check is ready", async () => {
@@ -57,5 +59,16 @@ describe("setup gating", () => {
     });
 
     expect(view).toBe("Chat");
+  });
+
+  it("shows continue action when setup report is ready", () => {
+    const setupView = SetupPage({
+      rootWritable: true,
+      runtimePresent: true,
+      providerReachable: true,
+      ready: true
+    });
+
+    expect(setupView).toContain("action: continue-provider");
   });
 });

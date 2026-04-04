@@ -7,7 +7,8 @@
     "test:e2e": "playwright test",
     "build": "tsc -p tsconfig.json",
     "build:portable": "pwsh ./scripts/build-portable.ps1",
-    "smoke": "pwsh ./scripts/smoke-openclaw.ps1"
+    "smoke": "pwsh ./scripts/smoke-openclaw.ps1",
+    "preview:shell": "vite-node ./scripts/preview-shell.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",

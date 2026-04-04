@@ -45,8 +45,9 @@ async function checkProviderReachable(
   fetcher: typeof fetch
 ): Promise<boolean> {
   const headers: Record<string, string> = {};
-  if (providerAuthToken) {
-    headers.Authorization = `Bearer ${providerAuthToken}`;
+  const token = providerAuthToken?.trim();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
   try {
     const response = await fetcher(providerHealthUrl, { method: "GET", headers });
