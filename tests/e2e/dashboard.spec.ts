@@ -92,4 +92,18 @@ test.describe("dashboard m0", () => {
     await expect(page.locator("#chat-frame")).toHaveCount(0);
     await expect(page.locator("#chat-sync-status")).toContainText("chatSync: connected");
   });
+
+  test("keeps unified navigation links between dashboard and chat", async ({ page }) => {
+    await page.goto(`http://127.0.0.1:${DASHBOARD_PREVIEW_PORT}/?runtimePresent=1&gatewayPort=18790&gatewayToken=tok_nav`);
+
+    await expect(page.getByRole("link", { name: "Dashboard", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Chat", exact: true })).toBeVisible();
+
+    await page.getByRole("link", { name: "Chat", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/chat\\?gatewayPort=18790&gatewayToken=tok_nav$`));
+    await expect(page.getByRole("link", { name: "Dashboard", exact: true })).toBeVisible();
+
+    await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`\\/?runtimePresent=[01]&gatewayPort=18790&gatewayToken=tok_nav$`));
+  });
 });

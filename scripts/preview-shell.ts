@@ -315,7 +315,7 @@ const server = createServer(async (req, res) => {
     *{box-sizing:border-box} body{margin:0;font-family:"Segoe UI",sans-serif;color:var(--text);background:radial-gradient(circle at 0 0,#17365a,transparent 35%),var(--bg)}
     .app{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
     .side{padding:18px 14px;border-right:1px solid var(--line);background:#0c1725}
-    .brand{font-weight:700}.nav{margin-top:18px;display:grid;gap:8px}.nav div{padding:9px 10px;border-radius:10px;color:var(--muted);border:1px solid transparent}.nav .on{color:#f2f7ff;background:#13263d;border-color:#2d4f75}
+    .brand{font-weight:700}.nav{margin-top:18px;display:grid;gap:8px}.nav a,.nav div{padding:9px 10px;border-radius:10px;color:var(--muted);border:1px solid transparent;text-decoration:none;display:block}.nav .on{color:#f2f7ff;background:#13263d;border-color:#2d4f75}
     .main{padding:18px}.top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}.title{margin:0;font-size:22px}
     .tag{font-size:12px;padding:5px 9px;border:1px solid var(--line);border-radius:999px;background:#102235}
     .grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px}.card{grid-column:span 4;border:1px solid var(--line);background:var(--panel);padding:12px;border-radius:12px}
@@ -336,7 +336,11 @@ const server = createServer(async (req, res) => {
     <aside class="side">
       <div class="brand">OnClaw Control</div>
       <div style="font-size:12px;color:var(--muted);margin-top:4px">Phase 3 M1 Preview</div>
-      <nav class="nav"><div class="on">Dashboard</div><div>Setup</div><div>Provider</div><div>Settings</div></nav>
+      <nav class="nav">
+        <a id="nav-dashboard" href="/" class="on">Dashboard</a>
+        <a id="nav-chat" href="/chat">Chat</a>
+        <div>Setup</div><div>Provider</div><div>Settings</div>
+      </nav>
     </aside>
     <main class="main">
       <div class="top"><h1 class="title">Gateway Dashboard</h1><div style="display:flex;gap:8px"><span class="tag">Localhost Only</span><span class="tag">M1 Scope</span></div></div>
@@ -390,7 +394,29 @@ const server = createServer(async (req, res) => {
     const settingsCard = document.getElementById("settings")?.closest("section");
     const devCard = document.querySelector("section.dev");
     const pageTitle = document.querySelector(".title");
-    const navActive = document.querySelector(".nav .on");
+    const navDashboard = document.getElementById("nav-dashboard");
+    const navChat = document.getElementById("nav-chat");
+
+    function updateNavLinks() {
+      const runtimePresent = String(form.elements.namedItem("runtimePresent")?.value || "0");
+      const gatewayPort = String(form.elements.namedItem("gatewayPort")?.value || "").trim();
+      const gatewayToken = String(form.elements.namedItem("gatewayToken")?.value || "").trim();
+
+      const dashboardParams = new URLSearchParams({ runtimePresent });
+      if (gatewayPort) dashboardParams.set("gatewayPort", gatewayPort);
+      if (gatewayToken) dashboardParams.set("gatewayToken", gatewayToken);
+
+      const chatParams = new URLSearchParams();
+      if (gatewayPort) chatParams.set("gatewayPort", gatewayPort);
+      if (gatewayToken) chatParams.set("gatewayToken", gatewayToken);
+
+      if (navDashboard) {
+        navDashboard.href = "/?" + dashboardParams.toString();
+      }
+      if (navChat) {
+        navChat.href = chatParams.toString() ? "/chat?" + chatParams.toString() : "/chat";
+      }
+    }
 
     if (isChatPage) {
       if (runtimeCard) runtimeCard.style.display = "none";
@@ -400,10 +426,14 @@ const server = createServer(async (req, res) => {
       if (devCard) devCard.style.display = "none";
       if (chatCard) chatCard.style.gridColumn = "span 12";
       if (pageTitle) pageTitle.textContent = "Chat";
-      if (navActive) navActive.textContent = "Chat";
+      if (navDashboard) navDashboard.classList.remove("on");
+      if (navChat) navChat.classList.add("on");
     } else {
       if (chatCard) chatCard.style.display = "none";
+      if (navDashboard) navDashboard.classList.add("on");
+      if (navChat) navChat.classList.remove("on");
     }
+    updateNavLinks();
 
     const chatSyncStatus = document.getElementById("chat-sync-status");
     const chatMessages = document.getElementById("chat-messages");
@@ -843,6 +873,7 @@ const server = createServer(async (req, res) => {
       document.getElementById("setup").textContent = data.setup;
       document.getElementById("provider").textContent = data.provider;
       document.getElementById("settings").textContent = data.settings;
+      updateNavLinks();
       if (isChatPage) {
         await loadChatSessionsAndHistory();
       }
