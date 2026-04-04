@@ -1,3 +1,5 @@
+import type { GatewayActionResult } from "../main/gateway-actions.js";
+import { DashboardPage } from "../renderer/routes/DashboardPage.js";
 import { ProviderPage } from "../renderer/routes/ProviderPage.js";
 import { SettingsPage } from "../renderer/routes/SettingsPage.js";
 import { SetupPage } from "../renderer/routes/SetupPage.js";
@@ -13,12 +15,16 @@ export interface PreviewInput {
   settingsRootDir?: string;
   settingsTimeoutMs?: number;
   settingsRetryCount?: number;
+  dashboardStatus?: "running" | "stopped";
+  dashboardHealthy?: boolean;
+  dashboardLastAction?: GatewayActionResult;
 }
 
 export interface PreviewViews {
   setup: string;
   provider: string;
   settings: string;
+  dashboard: string;
 }
 
 export function buildPreviewViews(input: PreviewInput = {}): PreviewViews {
@@ -38,6 +44,13 @@ export function buildPreviewViews(input: PreviewInput = {}): PreviewViews {
       rootDir: input.settingsRootDir,
       providerTimeoutMs: input.settingsTimeoutMs,
       providerRetryCount: input.settingsRetryCount
+    }),
+    dashboard: DashboardPage({
+      url: "http://127.0.0.1:18790",
+      token: "auto-random",
+      status: input.dashboardStatus ?? (runtimePresent ? "running" : "stopped"),
+      healthy: input.dashboardHealthy ?? runtimePresent,
+      lastAction: input.dashboardLastAction
     })
   };
 }

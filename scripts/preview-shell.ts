@@ -1,5 +1,16 @@
 import { createServer } from "node:http";
-import { PREVIEW_HOST, PREVIEW_PORT, buildPreviewViews } from "../src/preview/shell";
+import {
+  PREVIEW_HOST,
+  PREVIEW_PORT,
+  buildPreviewViews,
+  type PreviewInput
+} from "../src/preview/shell";
+import {
+  GATEWAY_ACTIONS,
+  runGatewayAction,
+  type GatewayAction,
+  type GatewayActionResult
+} from "../src/main/gateway-actions";
 
 function parseBoolean(value: string | null, fallback: boolean) {
   if (value === "1") return true;
@@ -13,22 +24,80 @@ function parseNumber(value: string | null) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-const server = createServer((req, res) => {
+function parseGatewayAction(value: string | null): GatewayAction | null {
+  if (!value) return null;
+  return GATEWAY_ACTIONS.find((item) => item === value) ?? null;
+}
+
+let dashboardState: { status: "running" | "stopped"; healthy: boolean; lastAction?: GatewayActionResult } = {
+  status: "stopped",
+  healthy: false
+};
+let dashboardInitialized = false;
+
+function syncDashboardFromSetup(runtimePresent: boolean) {
+  if (dashboardInitialized) return;
+  dashboardState = {
+    status: runtimePresent ? "running" : "stopped",
+    healthy: runtimePresent
+  };
+  dashboardInitialized = true;
+}
+
+function applyDashboardAction(result: GatewayActionResult) {
+  if (result.ok) {
+    if (result.action === "stop") {
+      dashboardState.status = "stopped";
+      dashboardState.healthy = false;
+    } else {
+      dashboardState.status = "running";
+      dashboardState.healthy = true;
+    }
+  }
+  dashboardState.lastAction = result;
+}
+
+const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://127.0.0.1");
 
   if (url.pathname === "/api/views") {
+    const runtimePresent = parseBoolean(url.searchParams.get("runtimePresent"), false);
+    syncDashboardFromSetup(runtimePresent);
+
     const views = buildPreviewViews({
       setupRootWritable: parseBoolean(url.searchParams.get("rootWritable"), true),
-      setupRuntimePresent: parseBoolean(url.searchParams.get("runtimePresent"), false),
+      setupRuntimePresent: runtimePresent,
       setupProviderReachable: parseBoolean(url.searchParams.get("providerReachable"), true),
       providerId: url.searchParams.get("provider") ?? undefined,
       settingsRootDir: url.searchParams.get("rootDir") ?? undefined,
       settingsTimeoutMs: parseNumber(url.searchParams.get("timeoutMs")),
-      settingsRetryCount: parseNumber(url.searchParams.get("retry"))
-    });
+      settingsRetryCount: parseNumber(url.searchParams.get("retry")),
+      dashboardStatus: dashboardState.status,
+      dashboardHealthy: dashboardState.healthy,
+      dashboardLastAction: dashboardState.lastAction
+    } satisfies PreviewInput);
 
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.end(JSON.stringify(views));
+    return;
+  }
+
+  if (url.pathname === "/api/gateway-action") {
+    const action = parseGatewayAction(url.searchParams.get("action"));
+    if (!action) {
+      res.statusCode = 400;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.end(JSON.stringify({ ok: false, message: "invalid action" }));
+      return;
+    }
+
+    const result = await runGatewayAction(action, {
+      runCommand: async () => ({ stdout: "ok" })
+    });
+    applyDashboardAction(result);
+
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.end(JSON.stringify(result));
     return;
   }
 
@@ -44,8 +113,9 @@ const server = createServer((req, res) => {
       .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
       pre { background: #f7f7f7; border: 1px solid #ddd; padding: 12px; white-space: pre-wrap; }
       form { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin-bottom: 12px; }
+      .actions { display: flex; gap: 8px; margin-bottom: 12px; }
       label { display: grid; gap: 4px; font-size: 12px; }
-      input, select { padding: 4px 6px; }
+      input, select, button { padding: 4px 6px; }
     </style>
   </head>
   <body>
@@ -59,7 +129,13 @@ const server = createServer((req, res) => {
       <label>Timeout ms<input name="timeoutMs" type="number" value="10000" /></label>
       <label>Retry<input name="retry" type="number" value="2" /></label>
     </form>
+    <div class="actions">
+      <button type="button" data-action="start">Start</button>
+      <button type="button" data-action="stop">Stop</button>
+      <button type="button" data-action="restart">Restart</button>
+    </div>
     <div class="grid">
+      <pre id="dashboard"></pre>
       <pre id="setup"></pre>
       <pre id="provider"></pre>
       <pre id="settings"></pre>
@@ -76,10 +152,18 @@ const server = createServer((req, res) => {
       async function refresh() {
         const params = new URLSearchParams(new FormData(form));
         const data = await fetch("/api/views?" + params.toString()).then((res) => res.json());
+        document.getElementById("dashboard").textContent = data.dashboard;
         document.getElementById("setup").textContent = data.setup;
         document.getElementById("provider").textContent = data.provider;
         document.getElementById("settings").textContent = data.settings;
       }
+      async function runAction(action) {
+        await fetch("/api/gateway-action?action=" + encodeURIComponent(action), { method: "POST" });
+        await refresh();
+      }
+      document.querySelectorAll("button[data-action]").forEach((button) => {
+        button.addEventListener("click", () => runAction(button.dataset.action));
+      });
       form.addEventListener("input", refresh);
       form.addEventListener("change", refresh);
       refresh();
